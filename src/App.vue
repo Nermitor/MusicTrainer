@@ -7,6 +7,7 @@ const speed = ref(1);
 const withAccidentals = ref(false);
 const noTimer = ref(false);
 const showClef = ref(true);
+const selectedOctaveRange = ref('all');
 
 function start() {
   showTrainer.value = true;
@@ -31,8 +32,14 @@ function stop() {
         <input type="checkbox" v-model="noTimer" /> Без таймера
       </label>
       <label>
-        <input type="checkbox" v-model="showClef" /> Скрыть ключ
+        <input type="checkbox" v-model="showClef" /> Показать ключ
       </label>
+    </div>
+    <div class="controls">
+      <label>Отображаемые ноты:</label>
+      <label><input type="radio" value="octave4" v-model="selectedOctaveRange" /> Первая октава</label>
+      <label><input type="radio" value="octave5" v-model="selectedOctaveRange" /> Вторая октава</label>
+      <label><input type="radio" value="all" v-model="selectedOctaveRange" /> Все</label>
     </div>
     <button class="start-btn" @click="start">Старт</button>
   </div>
@@ -42,6 +49,7 @@ function stop() {
     :with-accidentals="withAccidentals"
     :no-timer="noTimer"
     :show-clef="showClef"
+    :octave-range="selectedOctaveRange"
     @stop="stop"
   />
 </template>

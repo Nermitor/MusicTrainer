@@ -8,6 +8,7 @@ const props = defineProps<{
   withAccidentals: boolean;
   noTimer: boolean;
   showClef: boolean;
+  octaveRange: 'octave4' | 'octave5' | 'all';
 }>();
 const emit = defineEmits(['stop']);
 
@@ -39,7 +40,28 @@ const accidentals = [
   { key: 'g#/5', midi: 80, name: 'G#5/Ab5', acc: '#' },
   { key: 'a#/5', midi: 82, name: 'A#5/Bb5', acc: '#' },
 ];
-const allNotes = computed(() => props.withAccidentals ? [...naturalNotes, ...accidentals] : naturalNotes);
+
+const filteredNaturalNotes = computed(() => {
+  if (props.octaveRange === 'octave4') {
+    return naturalNotes.filter(note => note.name.endsWith('4'));
+  } else if (props.octaveRange === 'octave5') {
+    return naturalNotes.filter(note => note.name.endsWith('5'));
+  } else {
+    return naturalNotes; // 'all' or any other value
+  }
+});
+
+const filteredAccidentals = computed(() => {
+  if (props.octaveRange === 'octave4') {
+    return accidentals.filter(note => note.name.endsWith('4'));
+  } else if (props.octaveRange === 'octave5') {
+    return accidentals.filter(note => note.name.endsWith('5'));
+  } else {
+    return accidentals; // 'all' or any other value
+  }
+});
+
+const allNotes = computed(() => props.withAccidentals ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] : filteredNaturalNotes.value);
 
 const note = ref<typeof allNotes.value[0]>(allNotes.value[0]);
 const paused = ref(false);
@@ -244,6 +266,10 @@ onUnmounted(() => {
 
 watch(() => props.speed, startInterval);
 watch(() => props.withAccidentals, () => {
+  setRandomNoteAndSound();
+  startInterval();
+});
+watch(() => props.octaveRange, () => {
   setRandomNoteAndSound();
   startInterval();
 });
