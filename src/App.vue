@@ -5,9 +5,10 @@ import NotationTrainer from './components/NotationTrainer.vue';
 const showTrainer = ref(false);
 const speed = ref(1);
 const withAccidentals = ref(false);
-const noTimer = ref(false);
-const showClef = ref(true);
-const selectedOctaveRange = ref('all');
+const noTimer = ref(true);
+const showClef = ref(false);
+const selectedOctaveRange = ref<'all' | 'octave4' | 'octave5'>('all');
+const selectedLocationRange = ref<'all' | 'on' | 'between'>('all');
 
 function start() {
   showTrainer.value = true;
@@ -41,6 +42,12 @@ function stop() {
       <label><input type="radio" value="octave5" v-model="selectedOctaveRange" /> Вторая октава</label>
       <label><input type="radio" value="all" v-model="selectedOctaveRange" /> Все</label>
     </div>
+    <div class="controls">
+      <label>Расположение нот:</label>
+      <label><input type="radio" value="between" v-model="selectedLocationRange" /> Между линий</label>
+      <label><input type="radio" value="on" v-model="selectedLocationRange" /> На линии</label>
+      <label><input type="radio" value="all" v-model="selectedLocationRange" /> Все</label>
+    </div>
     <button class="start-btn" @click="start">Старт</button>
   </div>
   <NotationTrainer
@@ -50,6 +57,7 @@ function stop() {
     :no-timer="noTimer"
     :show-clef="showClef"
     :octave-range="selectedOctaveRange"
+    :location-range="selectedLocationRange"
     @stop="stop"
   />
 </template>

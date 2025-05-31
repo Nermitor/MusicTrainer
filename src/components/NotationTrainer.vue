@@ -9,6 +9,7 @@ const props = defineProps<{
   noTimer: boolean;
   showClef: boolean;
   octaveRange: 'octave4' | 'octave5' | 'all';
+  locationRange: 'on' | 'between' | 'all';
 }>();
 const emit = defineEmits(['stop']);
 
@@ -41,6 +42,16 @@ const accidentals = [
   { key: 'a#/5', midi: 82, name: 'A#5/Bb5', acc: '#' },
 ];
 
+const lineNotes = computed(() => [
+  ...naturalNotes.filter(note => ['E4', 'G4', 'B4', 'D5', 'F5'].includes(note.name)),
+  ...accidentals.filter(note => ['E#4/F4', 'Gb4', 'A#4/Bb4', 'C#5/Db5', 'E#5/F5'].includes(note.name)),
+]);
+
+const betweenNotes = computed(() => [
+  ...naturalNotes.filter(note => ['F4', 'A4', 'C5', 'E5', 'G5'].includes(note.name)),
+  ...accidentals.filter(note => ['F#4/Gb4', 'G#4/Ab4', 'A#4/Bb4', 'C#5/Db5', 'D#5/Eb5'].includes(note.name)),
+]);
+
 const filteredNaturalNotes = computed(() => {
   if (props.octaveRange === 'octave4') {
     return naturalNotes.filter(note => note.name.endsWith('4'));
@@ -61,7 +72,18 @@ const filteredAccidentals = computed(() => {
   }
 });
 
-const allNotes = computed(() => props.withAccidentals ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] : filteredNaturalNotes.value);
+const filteredNotesByLocation = computed(() => {
+  const currentNotes = props.withAccidentals ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] : filteredNaturalNotes.value;
+  if (props.locationRange === 'on') {
+    return currentNotes.filter(note => lineNotes.value.some(lineNote => lineNote.midi === note.midi));
+  } else if (props.locationRange === 'between') {
+    return currentNotes.filter(note => betweenNotes.value.some(betweenNote => betweenNote.midi === note.midi));
+  } else {
+    return currentNotes; // 'all' or any other value
+  }
+});
+
+const allNotes = computed(() => filteredNotesByLocation.value);
 
 const note = ref<typeof allNotes.value[0]>(allNotes.value[0]);
 const paused = ref(false);
@@ -270,6 +292,10 @@ watch(() => props.withAccidentals, () => {
   startInterval();
 });
 watch(() => props.octaveRange, () => {
+  setRandomNoteAndSound();
+  startInterval();
+});
+watch(() => props.locationRange, () => {
   setRandomNoteAndSound();
   startInterval();
 });
