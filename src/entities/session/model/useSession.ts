@@ -7,7 +7,6 @@ import type { SessionTypes } from '../types';
  */
 export const useSession = () => {
   const currentSession = ref<SessionTypes.Session | null>(null);
-  const noteStartTime = ref<number>(0);
   
   /**
    * Начать новую сессию
@@ -64,18 +63,9 @@ export const useSession = () => {
   };
   
   /**
-   * Записать время начала попытки угадать ноту
-   */
-  const recordNoteStart = (): void => {
-    noteStartTime.value = Date.now();
-  };
-  
-  /**
    * Добавить попытку угадать ноту
    */
-  const addAttempt = (noteName: string, midi: number, correct: boolean): NoteAttempt => {
-    const reactionTime = Date.now() - noteStartTime.value;
-    
+  const addAttempt = (noteName: string, midi: number, correct: boolean, reactionTime: number = 0): NoteAttempt => {
     const attempt: NoteAttempt = {
       noteName,
       midi,
@@ -125,7 +115,6 @@ export const useSession = () => {
     notesCompleted,
     startSession,
     endSession,
-    recordNoteStart,
     addAttempt,
   };
 };

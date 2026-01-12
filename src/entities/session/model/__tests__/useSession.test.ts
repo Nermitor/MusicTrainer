@@ -107,7 +107,7 @@ describe('useSession', () => {
     });
 
     it('should track reaction time', () => {
-      const { startSession, recordNoteStart, addAttempt } = useSession();
+      const { startSession, addAttempt } = useSession();
       
       const settings: TrainingSettings = {
         speed: 1,
@@ -127,11 +127,7 @@ describe('useSession', () => {
 
       startSession('infinite', settings);
 
-      vi.setSystemTime(1000);
-      recordNoteStart();
-      
-      vi.setSystemTime(2500); // 1500ms later
-      const attempt = addAttempt('D4', 62, true);
+      const attempt = addAttempt('D4', 62, true, 1500);
 
       expect(attempt.reactionTime).toBe(1500);
     });
@@ -222,7 +218,7 @@ describe('useSession', () => {
 
   describe('endSession', () => {
     it('should complete session and calculate final stats', () => {
-      const { startSession, addAttempt, recordNoteStart, endSession } = useSession();
+      const { startSession, addAttempt, endSession } = useSession();
       
       const settings: TrainingSettings = {
         speed: 1,
@@ -243,13 +239,11 @@ describe('useSession', () => {
       vi.setSystemTime(1000);
       startSession('infinite', settings);
 
-      recordNoteStart();
       vi.setSystemTime(2000);
-      addAttempt('C4', 60, true);
+      addAttempt('C4', 60, true, 1000);
 
-      recordNoteStart();
       vi.setSystemTime(3500);
-      addAttempt('D4', 62, true);
+      addAttempt('D4', 62, true, 1500);
 
       vi.setSystemTime(5000);
       const session = endSession();

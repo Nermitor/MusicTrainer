@@ -171,7 +171,7 @@ function viewStatistics() {
 }
 
 function handleNoteAttempt(attempt: NoteAttempt) {
-  sessionStore.addAttempt(attempt.noteName, attempt.midi, attempt.correct);
+  sessionStore.addAttempt(attempt.noteName, attempt.midi, attempt.correct, attempt.reactionTime);
 }
 
 // MIDI Calibration
