@@ -1,0 +1,77 @@
+<template>
+  <div class="settings-page">
+    <div class="settings-header">
+      <h1>⚙️ Настройки тренировки</h1>
+      <p>Настройте параметры для комфортной тренировки</p>
+    </div>
+    
+    <SettingsPanel v-model="settings" />
+    
+    <div class="settings-footer">
+      <BaseButton variant="primary" size="large" @click="emit('start')">
+        🎵 Начать тренировку
+      </BaseButton>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { TrainingSettings } from '@/shared/types';
+import { BaseButton } from '@/shared/ui';
+import { SettingsPanel } from '@/widgets/settings-panel';
+
+interface Props {
+  modelValue: TrainingSettings;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  'update:modelValue': [value: TrainingSettings];
+  start: [];
+}>();
+
+const settings = computed({
+  get: () => props.modelValue,
+  set: (v) => emit('update:modelValue', v),
+});
+</script>
+
+<style scoped>
+.settings-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: 2rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-header h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  background: linear-gradient(90deg, #42b883, #646cff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.settings-header p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.settings-footer {
+  padding: 2rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+</style>
