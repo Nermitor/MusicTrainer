@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { Profile } from '@/shared/types';
 import { BaseModal, BaseButton } from '@/shared/ui';
 
@@ -51,7 +51,7 @@ interface Props {
   profiles: Profile[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
@@ -61,7 +61,11 @@ const emit = defineEmits<{
   delete: [id: string];
 }>();
 
-const isOpen = ref(false);
+const isOpen = computed({
+  get: () => props.modelValue,
+  set: (v) => emit('update:modelValue', v),
+});
+
 const showInput = ref(false);
 const newProfileName = ref('');
 

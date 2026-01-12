@@ -5,7 +5,7 @@
       <p>Настройте параметры для комфортной тренировки</p>
     </div>
     
-    <SettingsPanel v-model="settings" />
+    <SettingsPanel v-model="settings" @start-calibration="emit('start-calibration')" />
     
     <div class="settings-footer">
       <BaseButton variant="primary" size="large" @click="emit('start')">
@@ -30,6 +30,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   'update:modelValue': [value: TrainingSettings];
   start: [];
+  'start-calibration': [];
 }>();
 
 const settings = computed({

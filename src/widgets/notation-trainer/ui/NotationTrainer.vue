@@ -2,9 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { Renderer, Stave, StaveNote, Accidental, Voice, Formatter, Stem } from 'vexflow';
 import * as Tone from 'tone';
-import { getKeyBindingMapping } from '@/shared/config/key-bindings';
 import { VirtualPiano } from '@/widgets/virtual-piano';
-import type { KeyBindingLayout } from '@/shared/types';
 
 const props = defineProps<{
   speed: number;
@@ -20,12 +18,26 @@ const props = defineProps<{
   midiCalibration: number;
   inputMode: 'midi' | 'virtual-piano';
   enableKeyboardInput: boolean;
-  keyBindingLayout: KeyBindingLayout;
 }>();
 const emit = defineEmits(['stop', 'noteAttempt']);
 
-// Получаем маппинг клавиш в зависимости от выбранной раскладки
-const keyboardMapping = computed(() => getKeyBindingMapping(props.keyBindingLayout));
+// Получаем пользовательские привязки клавиш из localStorage
+const keyboardMapping = computed(() => {
+  const saved = localStorage.getItem('customKeyBindings');
+  if (saved) {
+    try {
+      const bindings = JSON.parse(saved);
+      const result: Record<string, number> = {};
+      for (const [midi, key] of Object.entries(bindings)) {
+        result[String(key).toLowerCase()] = Number(midi);
+      }
+      return result;
+    } catch (e) {
+      console.error('Failed to load custom key bindings:', e);
+    }
+  }
+  return {};
+});
 
 const naturalNotes = [
   { key: 'c/4', midi: 60, name: 'C4' },
@@ -505,6 +517,14 @@ watch(() => props.inputMode, (newMode) => {
 });
 watch(note, () => {
   nextTick(drawNote);
+});
+
+// Expose необходимые свойства и методы для родительского компонента
+defineExpose({
+  expectedMidi,
+  midiMatched,
+  lastMidiNote,
+  handleVirtualInput: handleVirtualPianoPress,
 });
 
 </script>

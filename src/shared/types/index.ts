@@ -8,4 +8,6 @@ export type {
   NoteAttempt,
   TrainingSession,
   TrainingSettings,
+  InstrumentType,
+  InputMode,
 } from './training';

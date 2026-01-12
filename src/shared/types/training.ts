@@ -24,11 +24,6 @@ export type InstrumentType = 'piano' | 'synth' | 'guitar' | 'bass' | 'organ';
 export type InputMode = 'midi' | 'virtual-piano';
 
 /**
- * Раскладки клавиатуры
- */
-export type KeyBindingLayout = 'chromatic' | 'daw' | 'piano';
-
-/**
  * Попытка угадать ноту
  */
 export interface NoteAttempt {
@@ -78,5 +73,4 @@ export interface TrainingSettings {
   midiCalibration: number;
   inputMode: InputMode;
   enableKeyboardInput: boolean;
-  keyBindingLayout: KeyBindingLayout;
 }

@@ -1,15 +1,10 @@
 <template>
   <div class="settings-panel">
     <div class="settings-grid">
-      <!-- ТЕСТОВАЯ КАРТОЧКА В НАЧАЛЕ -->
-      <div class="settings-card full-width" style="background: red !important; padding: 30px;">
-        <h2 style="color: yellow; font-size: 30px;">⚠️ ТЕСТОВАЯ КАРТОЧКА</h2>
-        <p style="color: white; font-size: 20px;">Если видите это - значит файл обновляется!</p>
-      </div>
-      
-      <!-- Скорость -->
-      <div class="settings-card">
+      <!-- Ряд 1: Скорость (средняя карточка) -->
+      <div class="settings-card medium-card">
         <h3>⏱️ Скорость</h3>
+        <BaseCheckbox v-model="noTimer">Без таймера</BaseCheckbox>
         <BaseSlider
           v-model="speed"
           :min="0.1"
@@ -21,89 +16,131 @@
         />
       </div>
 
-      <!-- Таймер -->
-      <div class="settings-card">
-        <h3>⏳ Таймер</h3>
-        <BaseCheckbox v-model="noTimer">Без таймера</BaseCheckbox>
+      <!-- Ряд 1: Дополнительно (маленькая карточка) -->
+      <div class="settings-card small-card">
+        <h3>⚙️ Дополнительно</h3>
+        <BaseCheckbox v-model="withAccidentals">Полутоны</BaseCheckbox>
+        <BaseCheckbox v-model="showClef">Показать ключ</BaseCheckbox>
       </div>
 
-      <!-- Октавы и расположение -->
-      <div class="settings-card">
+      <!-- Ряд 2: Ноты (маленькая карточка) -->
+      <div class="settings-card small-card">
         <h3>🎹 Ноты</h3>
         <BaseRadioGroup
           v-model="octaveRange"
           label="Октава"
           :options="octaveOptions"
+          :inline="true"
         />
         <BaseRadioGroup
           v-model="locationRange"
           label="Расположение"
           :options="locationOptions"
+          :inline="true"
         />
       </div>
 
-      <!-- Дополнительно -->
-      <div class="settings-card">
-        <h3>⚙️ Дополнительно</h3>
-        <BaseCheckbox v-model="withAccidentals">Полутоны (диезы и бемоли)</BaseCheckbox>
-        <BaseCheckbox v-model="showClef">Показать ключ</BaseCheckbox>
+      <!-- Ряд 2: Инструмент (маленькая карточка) -->
+      <div class="settings-card small-card">
+        <InstrumentSelector v-model="instrumentType" />
       </div>
 
-      <!-- Подсказки -->
-      <div class="settings-card">
+      <!-- Ряд 3: Подсказки (средняя карточка) -->
+      <div class="settings-card medium-card">
         <h3>💡 Подсказки</h3>
-        <BaseCheckbox v-model="alwaysShowHint">Всегда показывать подсказку</BaseCheckbox>
+        <BaseCheckbox v-model="alwaysShowHint">Всегда показывать</BaseCheckbox>
         <BaseSlider
           v-model="hintDelay"
           :min="0"
           :max="10"
           :step="0.5"
-          label="Задержка подсказки (сек)"
+          label="Задержка (сек)"
           :disabled="alwaysShowHint"
           :value-formatter="(v) => v === 0 ? 'Нет' : `${v}с`"
         />
       </div>
 
-      <!-- Режим тренировки -->
-      <div class="settings-card full-width">
-        <TrainingModeSelector v-model="trainingMode" />
-      </div>
-
-      <!-- Инструмент -->
-      <div class="settings-card">
-        <InstrumentSelector v-model="instrumentType" />
-      </div>
-
-      <!-- Режим ввода -->
+      <!-- Режим ввода и привязка клавиш - объединённая карточка -->
       <div class="settings-card full-width">
         <InputModeSelector 
           v-model="inputMode" 
           :midi-calibration="midiCalibration"
+          :enable-keyboard-input="enableKeyboardInput"
           @start-calibration="handleStartCalibration"
         />
+        
+        <!-- Разделитель -->
+        <div class="section-divider"></div>
+        
+        <!-- Привязка клавиш -->
+        <div class="key-binding-section">
+          <h3>⌨️ Привязка клавиш</h3>
+          <p class="hint-text">Настройте привязки клавиш клавиатуры к нотам</p>
+          <button class="open-binding-btn" @click="showKeyBindingModal = true">
+            🎹 Открыть редактор привязок
+          </button>
+          <div v-if="hasBindings" class="bindings-summary">
+            <span class="summary-text">✓ Настроено привязок: {{ bindingsCount }}</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Раскладка клавиатуры -->
+      <!-- Режим тренировки - полная ширина (в самом низу) -->
       <div class="settings-card full-width">
-        <h3 style="color: white;">⌨️ Раскладка клавиатуры</h3>
-        <p style="color: red; font-size: 20px; font-weight: bold;">ТЕСТ - Раскладка: {{ keyBindingLayout }}</p>
-        <div style="background: red; padding: 20px; color: white;">
-          <p>Это тестовая карточка!</p>
-          <p>Если видите это - значит карточка рендерится</p>
+        <h3>🎮 Режим тренировки</h3>
+        <div class="mode-selector">
+          <label class="mode-option" :class="{ active: trainingMode === 'infinite' }">
+            <input type="radio" value="infinite" v-model="trainingMode" />
+            <div class="mode-content">
+              <div class="mode-icon">∞</div>
+              <div class="mode-name">Бесконечный</div>
+              <div class="mode-description">Тренировка без ограничений</div>
+            </div>
+          </label>
+          
+          <label class="mode-option" :class="{ active: trainingMode === 'exam' }">
+            <input type="radio" value="exam" v-model="trainingMode" />
+            <div class="mode-content">
+              <div class="mode-icon">📝</div>
+              <div class="mode-name">Экзамен</div>
+              <div class="mode-description">20 нот, оценка в конце</div>
+            </div>
+          </label>
+          
+          <label class="mode-option" :class="{ active: trainingMode === 'timed' }">
+            <input type="radio" value="timed" v-model="trainingMode" />
+            <div class="mode-content">
+              <div class="mode-icon">⏱️</div>
+              <div class="mode-name">На время</div>
+              <div class="mode-description">60 секунд испытание</div>
+            </div>
+          </label>
+          
+          <label class="mode-option" :class="{ active: trainingMode === 'survival' }">
+            <input type="radio" value="survival" v-model="trainingMode" />
+            <div class="mode-content">
+              <div class="mode-icon">❤️</div>
+              <div class="mode-name">Выживание</div>
+              <div class="mode-description">3 жизни, не ошибись!</div>
+            </div>
+          </label>
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно привязки клавиш -->
+    <KeyBindingModal v-model="showKeyBindingModal" @close="handleKeyBindingModalClose" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
 import { BaseSlider, BaseCheckbox, BaseRadioGroup } from '@/shared/ui';
-import { TrainingModeSelector } from '@/features/training-mode-selector';
+import { useModelProxies } from '@/shared/lib/vue/useModelProxy';
 import { InstrumentSelector } from '@/features/instrument-selector';
 import { InputModeSelector } from '@/features/input-mode-selector';
-import { KeyBindingSelector } from '@/features/key-binding-selector';
+import { KeyBindingModal } from '@/features/key-binding-modal';
 
 interface Props {
   modelValue: TrainingSettings;
@@ -116,70 +153,36 @@ const emit = defineEmits<{
   'startCalibration': [];
 }>();
 
-const speed = computed({
-  get: () => props.modelValue.speed,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, speed: v }),
-});
-
-const withAccidentals = computed({
-  get: () => props.modelValue.withAccidentals,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, withAccidentals: v }),
-});
-
-const noTimer = computed({
-  get: () => props.modelValue.noTimer,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, noTimer: v }),
-});
-
-const showClef = computed({
-  get: () => props.modelValue.showClef,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, showClef: v }),
-});
-
-const alwaysShowHint = computed({
-  get: () => props.modelValue.alwaysShowHint,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, alwaysShowHint: v }),
-});
-
-const hintDelay = computed({
-  get: () => props.modelValue.hintDelay,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, hintDelay: v }),
-});
-
-const octaveRange = computed({
-  get: () => props.modelValue.octaveRange,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, octaveRange: v }),
-});
-
-const locationRange = computed({
-  get: () => props.modelValue.locationRange,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, locationRange: v }),
-});
-
-const trainingMode = computed({
-  get: () => props.modelValue.trainingMode,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, trainingMode: v }),
-});
-
-const instrumentType = computed({
-  get: () => props.modelValue.instrumentType,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, instrumentType: v }),
-});
-
-const midiCalibration = computed({
-  get: () => props.modelValue.midiCalibration,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, midiCalibration: v }),
-});
-
-const inputMode = computed({
-  get: () => props.modelValue.inputMode,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, inputMode: v }),
-});
-
-const keyBindingLayout = computed({
-  get: () => props.modelValue.keyBindingLayout,
-  set: (v) => emit('update:modelValue', { ...props.modelValue, keyBindingLayout: v }),
-});
+// Создаём proxy computed properties для всех настроек
+const {
+  speed,
+  withAccidentals,
+  noTimer,
+  showClef,
+  alwaysShowHint,
+  hintDelay,
+  octaveRange,
+  locationRange,
+  trainingMode,
+  instrumentType,
+  midiCalibration,
+  inputMode,
+  enableKeyboardInput,
+} = useModelProxies(props, emit, [
+  'speed',
+  'withAccidentals',
+  'noTimer',
+  'showClef',
+  'alwaysShowHint',
+  'hintDelay',
+  'octaveRange',
+  'locationRange',
+  'trainingMode',
+  'instrumentType',
+  'midiCalibration',
+  'inputMode',
+  'enableKeyboardInput',
+]);
 
 function handleStartCalibration() {
   emit('startCalibration');
@@ -196,6 +199,34 @@ const locationOptions = [
   { value: 'on', label: 'На линии' },
   { value: 'between', label: 'Между линий' },
 ];
+
+// Модальное окно привязки клавиш
+const showKeyBindingModal = ref(false);
+const customKeyBindings = ref<Record<number, string>>({});
+
+// Загружаем привязки при монтировании
+onMounted(() => {
+  loadKeyBindings();
+});
+
+function loadKeyBindings() {
+  const saved = localStorage.getItem('customKeyBindings');
+  if (saved) {
+    try {
+      customKeyBindings.value = JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to load custom key bindings:', e);
+    }
+  }
+}
+
+function handleKeyBindingModalClose() {
+  showKeyBindingModal.value = false;
+  loadKeyBindings(); // Перезагружаем привязки после закрытия модалки
+}
+
+const hasBindings = computed(() => Object.keys(customKeyBindings.value).length > 0);
+const bindingsCount = computed(() => Object.keys(customKeyBindings.value).length);
 </script>
 
 <style scoped>
@@ -208,7 +239,7 @@ const locationOptions = [
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
@@ -222,6 +253,29 @@ const locationOptions = [
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  transition: all 0.3s ease;
+}
+
+/* Маленькая карточка - 1 колонка */
+.small-card {
+  grid-column: span 1;
+}
+
+/* Средняя карточка - 2 колонки */
+.medium-card {
+  grid-column: span 2;
+}
+
+/* Большая карточка - вся ширина */
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.settings-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .settings-card.full-width {
@@ -232,5 +286,165 @@ const locationOptions = [
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
   color: #fff;
+}
+
+.hint-text {
+  margin: 0 0 1rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+/* Разделитель между секциями */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  margin: 1.5rem 0;
+}
+
+/* Секция привязки клавиш */
+.key-binding-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.open-binding-btn {
+  width: 100%;
+  padding: 1.25rem 2rem;
+  background: linear-gradient(135deg, #42b883, #35a372);
+  border: none;
+  color: #fff;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(66, 184, 131, 0.3);
+}
+
+.open-binding-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(66, 184, 131, 0.4);
+}
+
+.bindings-summary {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(66, 184, 131, 0.1);
+  border: 1px solid rgba(66, 184, 131, 0.3);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.summary-text {
+  color: #42b883;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Mode Selector */
+.mode-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.mode-option {
+  position: relative;
+  cursor: pointer;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.mode-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+}
+
+.mode-option:hover {
+  border-color: rgba(66, 184, 131, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-option.active {
+  border-color: #42b883;
+  background: rgba(66, 184, 131, 0.15);
+}
+
+.mode-content {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.mode-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.mode-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.3rem;
+}
+
+.mode-description {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .settings-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+  
+  /* На планшетах все карточки занимают 1-2 колонки */
+  .small-card {
+    grid-column: span 1;
+  }
+  
+  .medium-card {
+    grid-column: span 2;
+  }
+  
+  .mode-selector {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-panel {
+    padding: 1rem;
+  }
+  
+  .settings-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  /* На мобильных все карточки занимают всю ширину */
+  .small-card,
+  .medium-card {
+    grid-column: span 1;
+  }
+  
+  .settings-card {
+    padding: 1.25rem;
+  }
+  
+  .mode-selector {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
