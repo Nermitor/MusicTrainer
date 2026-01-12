@@ -13,7 +13,7 @@ export const useProfile = () => {
    * Загрузить профили из localStorage
    */
   const loadProfiles = (): void => {
-    profiles.value = loadFromStorage<ProfileTypes.Profile[]>(STORAGE_KEYS.PROFILES, []);
+    profiles.value = loadFromStorage<ProfileTypes.Profile[]>(STORAGE_KEYS.PROFILES, []) ?? [];
   };
   
   /**
@@ -28,7 +28,7 @@ export const useProfile = () => {
    */
   const createProfile = (name: string, settings: TrainingSettings): ProfileTypes.Profile => {
     const profile: ProfileTypes.Profile = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       name: name.trim(),
       ...settings,
     };

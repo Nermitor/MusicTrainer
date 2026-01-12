@@ -20,9 +20,15 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.3",
+    "@vitest/coverage-v8": "^4.0.17",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.7.0",
+    "happy-dom": "^20.1.0",
+    "jsdom": "^27.4.0",
+    "terser": "^5.44.1",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
+    "vitest": "^4.0.17",
     "vue-tsc": "^2.2.8"
   }
 }

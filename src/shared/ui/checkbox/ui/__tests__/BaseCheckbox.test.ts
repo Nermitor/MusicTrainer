@@ -71,7 +71,8 @@ describe('BaseCheckbox', () => {
       },
     });
 
-    await wrapper.find('input[type="checkbox"]').trigger('change');
+    const checkbox = wrapper.find('input[type="checkbox"]');
+    await checkbox.setValue(true);
 
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([true]);
   });

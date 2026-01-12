@@ -1,9 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useStatistics } from '../useStatistics';
 import type { SessionTypes } from '@/entities/session';
 
 describe('useStatistics', () => {
   beforeEach(() => {
+    localStorage.clear();
+    // Очистить глобальное состояние
+    const { clearStatistics } = useStatistics();
+    clearStatistics();
+  });
+
+  afterEach(() => {
     localStorage.clear();
   });
 
@@ -32,7 +39,12 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
@@ -58,7 +70,12 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       const session2: SessionTypes.Session = {
@@ -72,7 +89,12 @@ describe('useStatistics', () => {
         wrongNotes: 5,
         accuracy: 75,
         averageReactionTime: 1200,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session1);
@@ -98,12 +120,17 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
 
-      const stored = localStorage.getItem('statistics');
+      const stored = localStorage.getItem('musicTrainerStatistics');
       expect(stored).toBeTruthy();
       
       const parsed = JSON.parse(stored!);
@@ -126,7 +153,12 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
@@ -155,13 +187,18 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
       clearStatistics();
 
-      const stored = localStorage.getItem('statistics');
+      const stored = localStorage.getItem('musicTrainerStatistics');
       const parsed = JSON.parse(stored!);
       expect(parsed.totalSessions).toBe(0);
     });
@@ -182,7 +219,12 @@ describe('useStatistics', () => {
         wrongNotes: 3,
         accuracy: 70,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
@@ -216,7 +258,12 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session);
@@ -240,7 +287,12 @@ describe('useStatistics', () => {
         wrongNotes: 2,
         accuracy: 80,
         averageReactionTime: 1500,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       const session2: SessionTypes.Session = {
@@ -254,7 +306,12 @@ describe('useStatistics', () => {
         wrongNotes: 5,
         accuracy: 75,
         averageReactionTime: 1200,
-        notes: [],
+        attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
       };
 
       addSession(session1);
@@ -282,7 +339,12 @@ describe('useStatistics', () => {
           wrongNotes: 2,
           accuracy: 80,
           averageReactionTime: 1500,
-          notes: [],
+          attempts: [],
+        settings: {
+          withAccidentals: false,
+          octaveRange: 'all',
+          locationRange: 'all',
+        },
         };
         addSession(session);
       }
@@ -303,7 +365,7 @@ describe('useStatistics', () => {
         sessions: [],
       };
 
-      localStorage.setItem('statistics', JSON.stringify(statsData));
+      localStorage.setItem('musicTrainerStatistics', JSON.stringify(statsData));
 
       const { statistics, loadStatistics } = useStatistics();
       loadStatistics();

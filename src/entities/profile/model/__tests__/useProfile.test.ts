@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useProfile } from '../useProfile';
 import type { TrainingSettings } from '@/shared/types';
 
 describe('useProfile', () => {
   beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
     localStorage.clear();
   });
 
@@ -109,7 +113,7 @@ describe('useProfile', () => {
 
       createProfile('Test', settings);
 
-      const stored = localStorage.getItem('profiles');
+      const stored = localStorage.getItem('musicTrainerProfiles');
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
       expect(parsed).toHaveLength(1);
@@ -168,7 +172,7 @@ describe('useProfile', () => {
       const profile = createProfile('Test', settings);
       deleteProfile(profile.id);
 
-      const stored = localStorage.getItem('profiles');
+      const stored = localStorage.getItem('musicTrainerProfiles');
       const parsed = JSON.parse(stored!);
       expect(parsed).toHaveLength(0);
     });
@@ -196,7 +200,7 @@ describe('useProfile', () => {
         },
       ];
 
-      localStorage.setItem('profiles', JSON.stringify(profilesData));
+      localStorage.setItem('musicTrainerProfiles', JSON.stringify(profilesData));
 
       const { profiles, loadProfiles } = useProfile();
       loadProfiles();
@@ -206,7 +210,7 @@ describe('useProfile', () => {
     });
 
     it('should handle corrupted localStorage data', () => {
-      localStorage.setItem('profiles', 'invalid-json{');
+      localStorage.setItem('musicTrainerProfiles', 'invalid-json{');
 
       const { profiles, loadProfiles } = useProfile();
       loadProfiles();

@@ -25,7 +25,7 @@ describe('note-utils', () => {
   describe('midiToRussianName', () => {
     it('should convert MIDI number to Russian note name', () => {
       expect(midiToRussianName(60)).toBe('До');
-      expect(midiToRussianName(61)).toBe('До#');
+      expect(midiToRussianName(61)).toBe('До♯');
       expect(midiToRussianName(62)).toBe('Ре');
       expect(midiToRussianName(64)).toBe('Ми');
       expect(midiToRussianName(65)).toBe('Фа');
@@ -35,11 +35,11 @@ describe('note-utils', () => {
     });
 
     it('should handle sharps correctly', () => {
-      expect(midiToRussianName(61)).toBe('До#');
-      expect(midiToRussianName(63)).toBe('Ре#');
-      expect(midiToRussianName(66)).toBe('Фа#');
-      expect(midiToRussianName(68)).toBe('Соль#');
-      expect(midiToRussianName(70)).toBe('Ля#');
+      expect(midiToRussianName(61)).toBe('До♯');
+      expect(midiToRussianName(63)).toBe('Ре♯');
+      expect(midiToRussianName(66)).toBe('Фа♯');
+      expect(midiToRussianName(68)).toBe('Соль♯');
+      expect(midiToRussianName(70)).toBe('Ля♯');
     });
 
     it('should handle different octaves', () => {

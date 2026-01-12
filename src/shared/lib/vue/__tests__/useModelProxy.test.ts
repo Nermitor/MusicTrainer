@@ -86,6 +86,9 @@ describe('useModelProxy', () => {
         city: 'NYC',
       });
 
+      // Обновляем props.modelValue как это делает Vue в реальной ситуации
+      props.modelValue = { name: 'Jane', age: 30, city: 'NYC' };
+
       proxies.age.value = 25;
       expect(emit).toHaveBeenLastCalledWith('update:modelValue', {
         name: 'Jane',

@@ -16,13 +16,13 @@ export function saveToStorage<T>(key: string, data: T): void {
 /**
  * Загрузить данные из localStorage
  */
-export function loadFromStorage<T>(key: string, defaultValue: T): T {
+export function loadFromStorage<T>(key: string, defaultValue?: T): T | null {
   try {
     const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : defaultValue;
+    return saved ? JSON.parse(saved) : (defaultValue !== undefined ? defaultValue : null);
   } catch (error) {
     console.error(`Error loading from localStorage (key: ${key}):`, error);
-    return defaultValue;
+    return defaultValue !== undefined ? defaultValue : null;
   }
 }
 

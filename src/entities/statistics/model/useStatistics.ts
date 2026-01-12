@@ -14,11 +14,13 @@ const DEFAULT_STATISTICS: StatisticsTypes.Statistics = {
   noteStats: {},
 };
 
+// Глобальное состояние статистики
+const statistics = ref<StatisticsTypes.Statistics>({ ...DEFAULT_STATISTICS });
+
 /**
  * Composable для работы со статистикой тренировок
  */
 export const useStatistics = () => {
-  const statistics = ref<StatisticsTypes.Statistics>({ ...DEFAULT_STATISTICS });
   
   /**
    * Загрузить статистику из localStorage
@@ -27,7 +29,7 @@ export const useStatistics = () => {
     statistics.value = loadFromStorage<StatisticsTypes.Statistics>(
       STORAGE_KEYS.STATISTICS,
       DEFAULT_STATISTICS
-    );
+    ) ?? DEFAULT_STATISTICS;
   };
   
   /**
@@ -91,7 +93,16 @@ export const useStatistics = () => {
    * Очистить всю статистику
    */
   const clearStatistics = (): void => {
-    statistics.value = { ...DEFAULT_STATISTICS };
+    statistics.value = {
+      totalSessions: 0,
+      totalNotes: 0,
+      totalCorrect: 0,
+      totalWrong: 0,
+      overallAccuracy: 0,
+      bestStreak: 0,
+      sessions: [],
+      noteStats: {},
+    };
     saveStatistics();
   };
   
