@@ -16,7 +16,7 @@
         <BaseButton v-if="currentView === 'statistics'" @click="currentView = 'settings'">
           ⬅ К настройкам
         </BaseButton>
-        <BaseButton v-if="currentView === 'training'" variant="danger" @click="stop">
+        <BaseButton v-if="currentView === 'training' && !showResults" variant="danger" @click="stop">
           ⏹ Завершить
         </BaseButton>
       </div>
@@ -52,22 +52,12 @@
           @stop="stop"
           @note-attempt="handleNoteAttempt"
         />
-        <VirtualPiano
-          v-if="settings.inputMode === 'virtual-piano'"
-          :show-keyboard-mapping="settings.enableKeyboardInput"
-          :correct-note="notationTrainerRef?.expectedMidi"
-          :highlight-correct="notationTrainerRef?.midiMatched === true"
-          :highlight-incorrect="notationTrainerRef?.midiMatched === false"
-          :pressed-midi-note="notationTrainerRef?.lastMidiNote"
-          :keyboard-mapping="customKeyboardMapping"
-          @note-pressed="handleVirtualPianoNote"
-        />
       </div>
 
       <!-- Results View -->
       <ResultsView
-        v-else-if="showResults && sessionStore.currentSession.value"
-        :session="sessionStore.currentSession.value"
+        v-else-if="showResults && lastCompletedSession"
+        :session="lastCompletedSession"
         :mode="settings.trainingMode"
         @restart="start"
         @back-to-settings="backToSettings"
@@ -76,7 +66,7 @@
 
       <!-- Statistics View -->
       <StatisticsView
-        v-else-if="currentView === 'statistics'"
+        v-if="currentView === 'statistics'"
         :statistics="statisticsStore.statistics.value"
         :sessions="statisticsStore.getRecentSessions(20)"
         @clear-statistics="handleClearStatistics"
@@ -107,16 +97,15 @@
 import { ref, onMounted } from 'vue';
 import type { TrainingSettings, NoteAttempt } from '@/shared/types';
 import type { ProfileTypes } from '@/entities/profile';
+import type { SessionTypes } from '@/entities/session';
 import { BaseButton } from '@/shared/ui';
 import { useMIDICalibration } from '@/shared/lib/midi/useMIDICalibration';
-import { useKeyBindings } from '@/shared/lib/keyboard/useKeyBindings';
 import { SettingsPage } from '@/pages/settings';
 import { ProfileManager } from '@/features/profile-manager';
 import { useProfile } from '@/entities/profile';
 import { useStatistics } from '@/entities/statistics';
 import { useSession } from '@/entities/session';
 import { NotationTrainer } from '@/widgets/notation-trainer';
-import { VirtualPiano } from '@/widgets/virtual-piano';
 import { ResultsView } from '@/widgets/results-view';
 import { StatisticsView } from '@/widgets/statistics-view';
 
@@ -126,6 +115,7 @@ const currentView = ref<ViewMode>('settings');
 const showProfileModal = ref(false);
 const showResults = ref(false);
 const notationTrainerRef = ref<InstanceType<typeof NotationTrainer> | null>(null);
+const lastCompletedSession = ref<SessionTypes.Session | null>(null);
 
 const settings = ref<TrainingSettings>({
   speed: 1,
@@ -150,9 +140,6 @@ const sessionStore = useSession();
 // MIDI Calibration composable
 const { startCalibration: startMIDICalibration } = useMIDICalibration();
 
-// Key Bindings composable
-const { keyboardMapping: customKeyboardMapping } = useKeyBindings();
-
 onMounted(() => {
   profileStore.loadProfiles();
   statisticsStore.loadStatistics();
@@ -162,12 +149,14 @@ function start() {
   sessionStore.startSession(settings.value.trainingMode, settings.value);
   currentView.value = 'training';
   showResults.value = false;
+  lastCompletedSession.value = null;
 }
 
 function stop() {
   const completedSession = sessionStore.endSession();
   if (completedSession) {
     statisticsStore.addSession(completedSession);
+    lastCompletedSession.value = completedSession;
   }
   showResults.value = true;
 }
@@ -183,12 +172,6 @@ function viewStatistics() {
 
 function handleNoteAttempt(attempt: NoteAttempt) {
   sessionStore.addAttempt(attempt.noteName, attempt.midi, attempt.correct);
-}
-
-function handleVirtualPianoNote(midi: number) {
-  if (notationTrainerRef.value) {
-    notationTrainerRef.value.handleVirtualInput(midi);
-  }
 }
 
 // MIDI Calibration
