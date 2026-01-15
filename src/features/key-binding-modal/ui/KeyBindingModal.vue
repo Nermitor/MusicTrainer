@@ -69,8 +69,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onUnmounted, computed, watch } from 'vue';
 import { BaseModal } from '@/shared/ui';
+import { useKeyBindings } from '@/shared/lib';
 
 interface Props {
   modelValue: boolean;
@@ -118,27 +119,34 @@ const whiteKeys = computed(() => pianoKeys.filter(k => !k.isBlack));
 const blackKeys = computed(() => pianoKeys.filter(k => k.isBlack));
 
 const selectedMidi = ref<number | null>(null);
-const customKeyBindings = ref<Record<number, string>>({});
+const { rawBindings, saveKeyBindings, clearKeyBindings, refresh } = useKeyBindings();
+const customKeyBindings = rawBindings;
 
-onMounted(() => {
-  loadBindings();
+let isListening = false;
+function startListening() {
+  if (isListening) return;
   window.addEventListener('keydown', handleKeyPress);
-});
+  isListening = true;
+}
+function stopListening() {
+  if (!isListening) return;
+  window.removeEventListener('keydown', handleKeyPress);
+  isListening = false;
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    refresh();
+    startListening();
+  } else {
+    stopListening();
+    selectedMidi.value = null;
+  }
+}, { immediate: true });
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyPress);
+  stopListening();
 });
-
-function loadBindings() {
-  const saved = localStorage.getItem('customKeyBindings');
-  if (saved) {
-    try {
-      customKeyBindings.value = JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load bindings:', e);
-    }
-  }
-}
 
 function selectNote(midi: number) {
   selectedMidi.value = midi;
@@ -159,18 +167,16 @@ function handleKeyPress(event: KeyboardEvent) {
   
   const key = event.key.toLowerCase();
   
+  const updatedBindings = { ...customKeyBindings.value };
   // Удаляем предыдущую привязку этой клавиши
-  for (const midi in customKeyBindings.value) {
-    if (customKeyBindings.value[midi] === key.toUpperCase()) {
-      delete customKeyBindings.value[midi];
+  for (const midi in updatedBindings) {
+    if (updatedBindings[midi] === key.toUpperCase()) {
+      delete updatedBindings[midi];
     }
   }
-  
   // Устанавливаем новую привязку
-  customKeyBindings.value[selectedMidi.value] = key.toUpperCase();
-  
-  // Сохраняем
-  localStorage.setItem('customKeyBindings', JSON.stringify(customKeyBindings.value));
+  updatedBindings[selectedMidi.value] = key.toUpperCase();
+  saveKeyBindings(updatedBindings);
   
   // Переходим к следующей ноте
   moveToNextNote();
@@ -189,8 +195,7 @@ function moveToNextNote() {
 
 function resetAllBindings() {
   if (confirm('Вы уверены, что хотите сбросить все привязки клавиш?')) {
-    customKeyBindings.value = {};
-    localStorage.removeItem('customKeyBindings');
+    clearKeyBindings();
     selectedMidi.value = null;
   }
 }

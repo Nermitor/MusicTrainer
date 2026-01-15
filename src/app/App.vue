@@ -99,7 +99,7 @@ import type { TrainingSettings, NoteAttempt } from '@/shared/types';
 import type { ProfileTypes } from '@/entities/profile';
 import type { SessionTypes } from '@/entities/session';
 import { BaseButton } from '@/shared/ui';
-import { useMIDICalibration } from '@/shared/lib/midi/useMIDICalibration';
+import { useMIDICalibration } from '@/shared/lib';
 import { SettingsPage } from '@/pages/settings';
 import { ProfileManager } from '@/features/profile-manager';
 import { useProfile } from '@/entities/profile';
@@ -221,12 +221,15 @@ function handleClearStatistics() {
 <style scoped>
 /* Base Container */
 .app-container {
-  width: 100vw;
+  width: 100%;
+  max-width: 100vw;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, #1e1e2d 0%, #141423 100%);
   color: #fff;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* Header */
@@ -278,34 +281,6 @@ function handleClearStatistics() {
   gap: 1rem;
 }
 
-.header-btn {
-  padding: 0.7rem 1.5rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #fff;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(5px);
-  font-weight: 500;
-}
-
-.header-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-}
-
-.stop-training-btn {
-  background: rgba(255, 65, 54, 0.15);
-  border-color: rgba(255, 65, 54, 0.3);
-}
-
-.stop-training-btn:hover {
-  background: rgba(255, 65, 54, 0.25);
-  border-color: rgba(255, 65, 54, 0.5);
-}
 
 /* Main Content */
 .app-main {
@@ -326,6 +301,8 @@ function handleClearStatistics() {
   padding: 2rem;
   gap: 1rem;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* Footer */
@@ -388,3 +365,4 @@ function handleClearStatistics() {
   background: rgba(255, 255, 255, 0.3);
 }
 </style>
+

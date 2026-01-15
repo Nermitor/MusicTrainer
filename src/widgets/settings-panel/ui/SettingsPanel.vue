@@ -137,7 +137,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
 import { BaseSlider, BaseCheckbox, BaseRadioGroup } from '@/shared/ui';
-import { useModelProxies } from '@/shared/lib/vue/useModelProxy';
+import { useModelProxies, useKeyBindings } from '@/shared/lib';
 import { InstrumentSelector } from '@/features/instrument-selector';
 import { InputModeSelector } from '@/features/input-mode-selector';
 import { KeyBindingModal } from '@/features/key-binding-modal';
@@ -202,31 +202,18 @@ const locationOptions = [
 
 // Модальное окно привязки клавиш
 const showKeyBindingModal = ref(false);
-const customKeyBindings = ref<Record<number, string>>({});
+const { rawBindings, refresh } = useKeyBindings();
 
-// Загружаем привязки при монтировании
 onMounted(() => {
-  loadKeyBindings();
+  refresh();
 });
-
-function loadKeyBindings() {
-  const saved = localStorage.getItem('customKeyBindings');
-  if (saved) {
-    try {
-      customKeyBindings.value = JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load custom key bindings:', e);
-    }
-  }
-}
 
 function handleKeyBindingModalClose() {
   showKeyBindingModal.value = false;
-  loadKeyBindings(); // Перезагружаем привязки после закрытия модалки
 }
 
-const hasBindings = computed(() => Object.keys(customKeyBindings.value).length > 0);
-const bindingsCount = computed(() => Object.keys(customKeyBindings.value).length);
+const hasBindings = computed(() => Object.keys(rawBindings.value).length > 0);
+const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
 </script>
 
 <style scoped>

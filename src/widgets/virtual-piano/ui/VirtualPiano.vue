@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import { usePiano } from '../model/usePiano';
 
 interface Props {
@@ -66,7 +66,7 @@ const emit = defineEmits<{
 
 const { pianoKeys } = usePiano();
 const pressedKey = ref<number | null>(null);
-const lastPressedNote = ref<number | null>(null);
+let clearPressedTimeout: number | null = null;
 
 // Разделяем клавиши на белые и черные и всегда добавляем mapping
 const reverseMapping = computed(() => {
@@ -102,14 +102,24 @@ function getBlackKeyPosition(index: number): string {
 
 function handleKeyPress(midi: number) {
   pressedKey.value = midi;
-  lastPressedNote.value = midi;
   emit('note-pressed', midi);
   
   // Снять визуальное нажатие через короткое время
-  setTimeout(() => {
+  if (clearPressedTimeout) {
+    clearTimeout(clearPressedTimeout);
+  }
+  clearPressedTimeout = window.setTimeout(() => {
     pressedKey.value = null;
+    clearPressedTimeout = null;
   }, 200);
 }
+
+onUnmounted(() => {
+  if (clearPressedTimeout) {
+    clearTimeout(clearPressedTimeout);
+    clearPressedTimeout = null;
+  }
+});
 </script>
 
 <style scoped>
@@ -123,8 +133,9 @@ function handleKeyPress(midi: number) {
 .piano-container {
   position: relative;
   width: 100%;
-  max-width: 900px;
+  max-width: min(900px, 100%);
   height: 180px;
+  box-sizing: border-box;
 }
 
 .piano-keys {

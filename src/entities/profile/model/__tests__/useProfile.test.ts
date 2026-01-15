@@ -1,14 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useProfile } from '../useProfile';
 import type { TrainingSettings } from '@/shared/types';
 
 describe('useProfile', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
   beforeEach(() => {
     localStorage.clear();
   });
 
   afterEach(() => {
     localStorage.clear();
+    consoleErrorSpy?.mockRestore();
+    consoleErrorSpy = null;
   });
 
   it('should initialize with empty profiles', () => {
@@ -210,6 +214,7 @@ describe('useProfile', () => {
     });
 
     it('should handle corrupted localStorage data', () => {
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       localStorage.setItem('musicTrainerProfiles', 'invalid-json{');
 
       const { profiles, loadProfiles } = useProfile();

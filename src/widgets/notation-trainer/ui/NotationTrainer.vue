@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { Renderer, Stave, StaveNote, Accidental, Voice, Formatter, Stem } from 'vexflow';
 import * as Tone from 'tone';
 import { VirtualPiano } from '@/widgets/virtual-piano';
+import { useKeyBindings } from '@/shared/lib';
 
 const props = defineProps<{
   speed: number;
@@ -21,23 +22,9 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(['stop', 'noteAttempt']);
 
-// Получаем пользовательские привязки клавиш из localStorage
-const keyboardMapping = computed(() => {
-  const saved = localStorage.getItem('customKeyBindings');
-  if (saved) {
-    try {
-      const bindings = JSON.parse(saved);
-      const result: Record<string, number> = {};
-      for (const [midi, key] of Object.entries(bindings)) {
-        result[String(key).toLowerCase()] = Number(midi);
-      }
-      return result;
-    } catch (e) {
-      console.error('Failed to load custom key bindings:', e);
-    }
-  }
-  return {};
-});
+const { keyboardMapping } = useKeyBindings();
+
+const MIDI_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
 const naturalNotes = [
   { key: 'c/4', midi: 60, name: 'C4' },
@@ -68,15 +55,21 @@ const accidentals = [
   { key: 'a#/5', midi: 82, name: 'A#5/Bb5', acc: '#' },
 ];
 
-const lineNotes = computed(() => [
-  ...naturalNotes.filter(note => ['E4', 'G4', 'B4', 'D5', 'F5'].includes(note.name)),
-  ...accidentals.filter(note => ['E#4/F4', 'Gb4', 'A#4/Bb4', 'C#5/Db5', 'E#5/F5'].includes(note.name)),
-]);
+const diatonicIndexByLetter: Record<string, number> = {
+  C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6,
+};
+const staffBaseIndex = diatonicIndexByLetter.E + 4 * 7; // E4 — линия нотоносца
 
-const betweenNotes = computed(() => [
-  ...naturalNotes.filter(note => ['F4', 'A4', 'C5', 'E5', 'G5'].includes(note.name)),
-  ...accidentals.filter(note => ['F#4/Gb4', 'G#4/Ab4', 'A#4/Bb4', 'C#5/Db5', 'D#5/Eb5'].includes(note.name)),
-]);
+function getStaffPositionType(noteName: string): 'line' | 'between' | null {
+  const primaryName = noteName.split('/')[0];
+  const match = primaryName.match(/^([A-G])([#b]?)(\d)$/);
+  if (!match) return null;
+  const letter = match[1];
+  const octave = Number(match[3]);
+  const diatonic = diatonicIndexByLetter[letter] + octave * 7;
+  const diff = diatonic - staffBaseIndex;
+  return diff % 2 === 0 ? 'line' : 'between';
+}
 
 const filteredNaturalNotes = computed(() => {
   if (props.octaveRange === 'octave4') {
@@ -101,11 +94,11 @@ const filteredAccidentals = computed(() => {
 const filteredNotesByLocation = computed(() => {
   const currentNotes = props.withAccidentals ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] : filteredNaturalNotes.value;
   if (props.locationRange === 'on') {
-    return currentNotes.filter(note => lineNotes.value.some(lineNote => lineNote.midi === note.midi));
+    return currentNotes.filter(note => getStaffPositionType(note.name) === 'line');
   } else if (props.locationRange === 'between') {
-    return currentNotes.filter(note => betweenNotes.value.some(betweenNote => betweenNote.midi === note.midi));
+    return currentNotes.filter(note => getStaffPositionType(note.name) === 'between');
   } else {
-    return currentNotes; // 'all' or any other value
+    return currentNotes; // 'all' или любое другое значение
   }
 });
 
@@ -122,6 +115,7 @@ const tooltipVisible = computed(() => (props.alwaysShowHint || showTooltip.value
 const countdown = ref(props.speed);
 let countdownInterval: number | null = null;
 let hintTimeout: number | null = null;
+const pendingTimeouts = new Set<number>();
 
 const midiSupported = ref(false);
 const midiStatus = ref('');
@@ -245,7 +239,7 @@ function createSynth() {
 }
 
 async function playMidiNoteSound(midi: number) {
-  await Tone.start();
+  await ensureToneStarted();
   if (!currentSynth) {
     createSynth();
   }
@@ -287,6 +281,19 @@ function stopHintTimer() {
     hintTimeout = null;
   }
   autoShowTooltip.value = false;
+}
+
+function scheduleTimeout(callback: () => void, delay: number) {
+  const id = window.setTimeout(() => {
+    pendingTimeouts.delete(id);
+    callback();
+  }, delay);
+  pendingTimeouts.add(id);
+}
+
+function clearPendingTimeouts() {
+  pendingTimeouts.forEach((id) => clearTimeout(id));
+  pendingTimeouts.clear();
 }
 
 function startModeTimer() {
@@ -338,6 +345,7 @@ function clearIntervalIfNeeded() {
   }
   stopCountdown();
   stopHintTimer();
+  clearPendingTimeouts();
 }
 
 function stop() {
@@ -368,10 +376,16 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function midiNumberToName(midi: number): string {
-  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const note = notes[midi % 12];
+  const note = MIDI_NOTE_NAMES[midi % 12];
   const octave = Math.floor(midi / 12) - 1;
   return note + octave;
+}
+let toneStartPromise: Promise<void> | null = null;
+async function ensureToneStarted() {
+  if (!toneStartPromise) {
+    toneStartPromise = Tone.start();
+  }
+  await toneStartPromise;
 }
 function midiNumberToRu(midi: number): string {
   const name = midiNumberToName(midi);
@@ -405,16 +419,16 @@ function handleNotePress(pressedMidi: number) {
     
     // Проверить условия завершения режимов
     if (props.trainingMode === 'exam' && notesCompleted.value >= 20) {
-      setTimeout(() => {
+      scheduleTimeout(() => {
         stop();
       }, 500);
       return;
     }
     
-    setTimeout(() => {
+    scheduleTimeout(() => {
       midiMatched.value = null;
       setRandomNoteAndSound();
-      setTimeout(() => {
+      scheduleTimeout(() => {
         lastMidiNote.value = null;
         lastMidiName.value = '';
         lastMidiRu.value = '';
@@ -427,14 +441,14 @@ function handleNotePress(pressedMidi: number) {
     if (props.trainingMode === 'survival') {
       livesRemaining.value--;
       if (livesRemaining.value <= 0) {
-        setTimeout(() => {
+        scheduleTimeout(() => {
           stop();
         }, 500);
         return;
       }
     }
     
-    setTimeout(() => { midiMatched.value = null; }, 500);
+    scheduleTimeout(() => { midiMatched.value = null; }, 500);
   }
 }
 
@@ -490,6 +504,10 @@ onUnmounted(() => {
   clearIntervalIfNeeded();
   stopModeTimer();
   window.removeEventListener('keydown', onKeydown);
+  if (currentSynth) {
+    currentSynth.dispose();
+    currentSynth = null;
+  }
 });
 
 watch(() => props.speed, startInterval);
@@ -513,6 +531,14 @@ watch(() => props.inputMode, (newMode) => {
   // При смене режима ввода, переинициализируем MIDI если нужно
   if (newMode === 'midi' && navigator.requestMIDIAccess) {
     navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+  }
+});
+watch(() => props.noTimer, (noTimer) => {
+  if (noTimer) {
+    clearIntervalIfNeeded();
+  } else {
+    setRandomNoteAndSound();
+    startInterval();
   }
 });
 watch(note, () => {
@@ -580,8 +606,11 @@ defineExpose({
   align-items: center;
   justify-content: center;
   width: 100%;
+  max-width: 100%;
   height: 100%;
   gap: 2rem;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 .notation-block {
   margin: 0.5rem 0;
@@ -591,12 +620,16 @@ defineExpose({
   padding: 1rem 1rem 0.75rem 1rem;
   position: relative;
   min-width: 480px;
+  max-width: 100%;
   min-height: 200px;
+  box-sizing: border-box;
 }
 .notation-canvas {
   width: 500px;
+  max-width: 100%;
   height: 220px;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .tooltip {
   position: absolute;
@@ -659,12 +692,14 @@ defineExpose({
 
 .virtual-piano-container {
   width: 100%;
-  max-width: 1000px;
+  max-width: min(1000px, 100%);
   margin: 2rem auto;
   padding: 1.5rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .keyboard-hint-banner {

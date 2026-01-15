@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { saveToStorage, loadFromStorage } from '../storage';
 
 describe('storage', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
   beforeEach(() => {
     localStorage.clear();
+  });
+  afterEach(() => {
+    consoleErrorSpy?.mockRestore();
+    consoleErrorSpy = null;
   });
 
   describe('saveToStorage', () => {
@@ -52,6 +58,7 @@ describe('storage', () => {
     });
 
     it('should return null for invalid JSON', () => {
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       localStorage.setItem('invalid', 'not-json{');
       const loaded = loadFromStorage('invalid');
       expect(loaded).toBeNull();
