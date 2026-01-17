@@ -176,19 +176,40 @@ function drawNote() {
   const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
   const isMobile = viewportWidth < 768;
   
+  // Получаем размеры белого пространства (notation block)
+  const notationBlock = canvasElement.parentElement;
+  const blockWidth = notationBlock?.offsetWidth || actualCanvasWidth;
+  const blockHeight = notationBlock?.offsetHeight || actualCanvasWidth * 0.44;
+  
+  // Нотный стан должен занимать 80% белого пространства
+  const targetStaveWidth = blockWidth * 0.8;
+  const targetStaveHeight = blockHeight * 0.8;
+  
   // Базовый размер для масштабирования (500px - стандартный размер)
   const baseWidth = 500;
   const baseHeight = 220;
-  const scaleFactor = actualCanvasWidth / baseWidth;
-  
-  // Вычисляем размеры canvas пропорционально
-  const minWidth = isMobile ? 240 : 280;
-  const canvasWidth = Math.max(minWidth, Math.floor(actualCanvasWidth));
-  const canvasHeight = Math.max(150, Math.round(canvasWidth * (baseHeight / baseWidth)));
   
   // Позиционирование stave пропорционально размеру canvas
   // Скрипичный ключ требует места слева (примерно 8-10% ширины)
   const staveXPercent = isMobile ? 0.08 : 0.06;
+  
+  // Вычисляем scaleFactor так, чтобы стан занимал 80% ширины блока
+  // scaledStaveWidth * finalScaleFactor = targetStaveWidth
+  // (baseStaveWidth * 0.5) * (scaleFactor * 2) = targetStaveWidth
+  // baseStaveWidth * scaleFactor = targetStaveWidth
+  const baseStaveWidth = baseWidth * (1 - staveXPercent * 2);
+  const scaleFactor = targetStaveWidth / baseStaveWidth;
+  
+  const minWidth = isMobile ? 240 : 280;
+  const canvasWidth = Math.max(minWidth, Math.floor(actualCanvasWidth));
+  // Высоту вычисляем на основе целевой высоты стана (80% блока)
+  // После масштабирования высота стана будет targetStaveHeight
+  const baseCanvasHeight = Math.max(150, Math.round(targetStaveHeight / (scaleFactor * 2))); // Делим на finalScaleFactor
+  const canvasHeight = baseCanvasHeight * 2; // Увеличиваем высоту в 2 раза для масштабированных символов
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NotationTrainer.vue:205',message:'Notation block and stave sizing for 80%',data:{viewportWidth,blockWidth,blockHeight,targetStaveWidth,targetStaveHeight,actualCanvasWidth,canvasWidth,canvasHeight,scaleFactor,baseStaveWidth},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   
   // Используем canvasWidth/canvasHeight для renderer, но масштабируем контекст
   const renderer = new Renderer(canvasElement, Renderer.Backends.SVG);
@@ -197,19 +218,26 @@ function drawNote() {
   context.setFont('Arial', 16, '').setBackgroundFillStyle('#fff');
   
   // Применяем масштабирование контекста для пропорционального изменения всех элементов
-  // На мобильных устройствах символы в 2 раза больше, так как стан в 2 раза короче
-  const finalScaleFactor = isMobile ? scaleFactor * 2 : scaleFactor;
+  // Ширина стана уменьшена в 2 раза, а масштаб увеличен в 2 раза для всех устройств
+  const finalScaleFactor = scaleFactor * 2;
   context.scale(finalScaleFactor, finalScaleFactor);
   
   // Вычисляем позиции в базовой системе координат (после масштабирования контекста)
   // Координаты должны быть в исходной системе, так как контекст уже масштабирован
   const scaledStaveX = baseWidth * staveXPercent;
-  // На мобильных устройствах нотный стан в 2 раза короче
-  const baseStaveWidth = baseWidth * (1 - staveXPercent * 2);
-  const scaledStaveWidth = isMobile ? baseStaveWidth * 0.5 : baseStaveWidth;
-  // На мобильных при увеличении масштаба в 2 раза нужно скорректировать позицию Y
-  // чтобы стан оставался в видимой области
-  const scaledStaveY = isMobile ? Math.round(baseHeight * 0.25) : Math.round(baseHeight * 0.45);
+  // Ширина нотного стана уменьшена в 2 раза (baseStaveWidth уже вычислена выше)
+  const scaledStaveWidth = baseStaveWidth * 0.5;
+  // При увеличении масштаба в 2 раза нужно скорректировать позицию Y
+  // Y-координата в базовой системе координат (до масштабирования контекста)
+  // После context.scale(2x, 2x) эта координата умножится на 2, поэтому делим на finalScaleFactor
+  // Используем позицию относительно базовой высоты, так как canvas теперь в 2 раза выше
+  const targetScaledStaveY = baseHeight * 0.45; // Целевая позиция Y после масштабирования (45% от baseHeight)
+  const baseStaveY = targetScaledStaveY / finalScaleFactor;
+  const scaledStaveY = baseStaveY;
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NotationTrainer.vue:214',message:'Stave positioning with 2x mobile scale',data:{isMobile,finalScaleFactor,scaleFactor,scaledStaveX,scaledStaveY,baseStaveY,scaledStaveWidth,baseHeight,baseWidth,canvasHeight,canvasWidth},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   
   const stave = new Stave(scaledStaveX, scaledStaveY, scaledStaveWidth);
   if (props.showClef) {
