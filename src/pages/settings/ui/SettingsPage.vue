@@ -42,10 +42,12 @@ const settings = computed({
 <style scoped>
 .settings-page {
   width: 100%;
+  max-width: 100vw;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .settings-header {
@@ -53,6 +55,9 @@ const settings = computed({
   text-align: center;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .settings-header h1 {
@@ -74,5 +79,36 @@ const settings = computed({
   text-align: center;
   background: rgba(255, 255, 255, 0.02);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .settings-header {
+    padding: 1.5rem 1rem;
+  }
+  
+  .settings-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .settings-footer {
+    padding: 1.5rem 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-header {
+    padding: 1rem 0.75rem;
+  }
+  
+  .settings-header h1 {
+    font-size: 1.3rem;
+  }
+  
+  .settings-footer {
+    padding: 1rem 0.75rem;
+  }
 }
 </style>

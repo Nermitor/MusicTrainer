@@ -168,11 +168,50 @@ function setRandomNoteAndSound() {
 function drawNote() {
   if (!canvasRef.value) return;
   canvasRef.value.innerHTML = '';
-  const renderer = new Renderer(canvasRef.value, Renderer.Backends.SVG);
-  renderer.resize(500, 220);
+  
+  const viewportWidth = window.innerWidth;
+  const canvasElement = canvasRef.value;
+  const canvasRect = canvasElement.getBoundingClientRect();
+  // Используем реальную ширину элемента для пропорционального масштабирования
+  const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
+  const isMobile = viewportWidth < 768;
+  
+  // Базовый размер для масштабирования (500px - стандартный размер)
+  const baseWidth = 500;
+  const baseHeight = 220;
+  const scaleFactor = actualCanvasWidth / baseWidth;
+  
+  // Вычисляем размеры canvas пропорционально
+  const minWidth = isMobile ? 240 : 280;
+  const canvasWidth = Math.max(minWidth, Math.floor(actualCanvasWidth));
+  const canvasHeight = Math.max(150, Math.round(canvasWidth * (baseHeight / baseWidth)));
+  
+  // Позиционирование stave пропорционально размеру canvas
+  // Скрипичный ключ требует места слева (примерно 8-10% ширины)
+  const staveXPercent = isMobile ? 0.08 : 0.06;
+  
+  // Используем canvasWidth/canvasHeight для renderer, но масштабируем контекст
+  const renderer = new Renderer(canvasElement, Renderer.Backends.SVG);
+  renderer.resize(canvasWidth, canvasHeight);
   const context = renderer.getContext();
   context.setFont('Arial', 16, '').setBackgroundFillStyle('#fff');
-  const stave = new Stave(30, 100, 440);
+  
+  // Применяем масштабирование контекста для пропорционального изменения всех элементов
+  // На мобильных устройствах символы в 2 раза больше, так как стан в 2 раза короче
+  const finalScaleFactor = isMobile ? scaleFactor * 2 : scaleFactor;
+  context.scale(finalScaleFactor, finalScaleFactor);
+  
+  // Вычисляем позиции в базовой системе координат (после масштабирования контекста)
+  // Координаты должны быть в исходной системе, так как контекст уже масштабирован
+  const scaledStaveX = baseWidth * staveXPercent;
+  // На мобильных устройствах нотный стан в 2 раза короче
+  const baseStaveWidth = baseWidth * (1 - staveXPercent * 2);
+  const scaledStaveWidth = isMobile ? baseStaveWidth * 0.5 : baseStaveWidth;
+  // На мобильных при увеличении масштаба в 2 раза нужно скорректировать позицию Y
+  // чтобы стан оставался в видимой области
+  const scaledStaveY = isMobile ? Math.round(baseHeight * 0.25) : Math.round(baseHeight * 0.45);
+  
+  const stave = new Stave(scaledStaveX, scaledStaveY, scaledStaveWidth);
   if (props.showClef) {
     stave.addClef('treble');
   }
@@ -196,10 +235,16 @@ function drawNote() {
   const voice = new Voice({ numBeats: 1, beatValue: 4 });
   voice.setStrict(false);
   voice.addTickable(staveNote);
-  new Formatter().joinVoices([voice]).format([voice], 350);
+  const formatWidth = Math.round(scaledStaveWidth * 0.75);
+  new Formatter().joinVoices([voice]).format([voice], formatWidth);
   voice.draw(context, stave);
   const svg = canvasRef.value.querySelector('svg');
-  if (svg) svg.style.color = '#111';
+  if (svg) {
+    svg.style.color = '#111';
+    // SVG уже масштабирован через context.scale(), просто убеждаемся, что размеры правильные
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+  }
 }
 
 // Создаем синтезатор в зависимости от выбранного инструмента
@@ -613,23 +658,45 @@ defineExpose({
   overflow-x: hidden;
 }
 .notation-block {
-  margin: 0.5rem 0;
+  margin: 0.5rem auto;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 16px #0003;
-  padding: 1rem 1rem 0.75rem 1rem;
+  padding: 1rem;
   position: relative;
-  min-width: 480px;
-  max-width: 100%;
-  min-height: 200px;
+  width: 100%;
+  max-width: 500px;
+  min-height: 180px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .notation-block {
+    width: calc(100% - 2rem);
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .notation-block {
+    width: calc(100% - 1.5rem);
+    max-width: calc(100vw - 1.5rem);
+    padding: 0.75rem;
+  }
 }
 .notation-canvas {
-  width: 500px;
+  width: 100%;
   max-width: 100%;
-  height: 220px;
+  height: auto;
+  min-height: 150px;
+  aspect-ratio: 500 / 220;
   cursor: pointer;
   box-sizing: border-box;
+  display: block;
+  overflow: visible;
 }
 .tooltip {
   position: absolute;
@@ -700,6 +767,104 @@ defineExpose({
   border-radius: 16px;
   box-sizing: border-box;
   overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .virtual-piano-container {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .virtual-piano-container {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+/* Responsive для мобильных */
+@media (max-width: 768px) {
+  .notation-block {
+    padding: 0.75rem;
+    margin: 0.25rem 1rem;
+    width: calc(100% - 2rem);
+    max-width: calc(100vw - 2rem);
+  }
+  
+  .notation-canvas {
+    min-height: 160px;
+    width: 100%;
+  }
+  
+  
+  .tooltip {
+    font-size: 1.5rem;
+    padding: 0.8rem 1.5rem 0.6rem 1.5rem;
+    min-width: 150px;
+  }
+  
+  .trainer {
+    gap: 1rem;
+    padding: 0 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .notation-block {
+    padding: 0.75rem;
+    margin: 0.25rem 0;
+    width: calc(100% - 1.5rem);
+    max-width: calc(100vw - 1.5rem);
+    border-radius: 8px;
+  }
+  
+  .notation-canvas {
+    min-height: 140px;
+    width: 100%;
+  }
+  
+  
+  .trainer {
+    gap: 0.75rem;
+    padding: 0 0.75rem;
+  }
+  
+  .countdown-text {
+    font-size: 1.5rem;
+  }
+  
+  .tooltip {
+    font-size: 1.2rem;
+    padding: 0.6rem 1rem 0.4rem 1rem;
+    min-width: 120px;
+  }
+  
+  .mode-info {
+    font-size: 1.1rem;
+    padding: 0.6rem 1.5rem;
+  }
+  
+  .pause-indicator {
+    font-size: 1rem;
+    padding: 0.6rem 1.5rem;
+  }
+  
+  .midi-last {
+    font-size: 1rem;
+  }
 }
 
 .keyboard-hint-banner {

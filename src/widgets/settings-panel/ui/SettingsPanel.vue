@@ -221,7 +221,9 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
   width: 100%;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 2rem;
+  box-sizing: border-box;
 }
 
 .settings-grid {
@@ -230,6 +232,8 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
   gap: 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .settings-card {
@@ -413,11 +417,17 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
 @media (max-width: 640px) {
   .settings-panel {
     padding: 1rem;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
   
   .settings-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   
   /* На мобильных все карточки занимают всю ширину */
@@ -428,10 +438,27 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
   
   .settings-card {
     padding: 1.25rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   
   .mode-selector {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-panel {
+    padding: 0.75rem;
+  }
+  
+  .settings-card {
+    padding: 1rem;
+  }
+  
+  .settings-grid {
+    gap: 0.75rem;
   }
 }
 </style>

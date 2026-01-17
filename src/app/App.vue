@@ -279,8 +279,14 @@ function handleClearStatistics() {
 .header-right {
   display: flex;
   gap: 1rem;
+  align-items: center;
+  flex-shrink: 0;
 }
 
+.header-left {
+  flex: 1;
+  min-width: 0; /* Позволяет сжиматься при необходимости */
+}
 
 /* Main Content */
 .app-main {
@@ -303,6 +309,20 @@ function handleClearStatistics() {
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .training-view {
+    padding: 1rem 0;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .training-view {
+    padding: 0.75rem 0;
+    gap: 0.5rem;
+  }
 }
 
 /* Footer */
@@ -330,11 +350,18 @@ function handleClearStatistics() {
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-header {
-    padding: 1rem 1.5rem;
+    padding: 1rem 1rem;
+    flex-wrap: nowrap;
+  }
+  
+  .header-left {
+    gap: 0.75rem;
   }
   
   .app-title {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
+    line-height: 1.2;
+    padding: 0;
   }
   
   .app-logo {
@@ -342,7 +369,33 @@ function handleClearStatistics() {
   }
   
   .header-right {
-    flex-wrap: wrap;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0.75rem 0.75rem;
+  }
+  
+  .header-left {
+    gap: 0.5rem;
+  }
+  
+  .app-title {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .app-logo {
+    font-size: 1.3rem;
+  }
+  
+  .header-right {
+    gap: 0.4rem;
   }
 }
 

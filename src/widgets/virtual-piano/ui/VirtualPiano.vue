@@ -1,7 +1,7 @@
 <template>
   <div class="virtual-piano">
-    <div class="piano-container">
-      <div class="piano-keys">
+    <div ref="pianoContainerRef" class="piano-container">
+      <div ref="pianoKeysRef" class="piano-keys">
         <!-- Белые клавиши -->
          <div
            v-for="key in whiteKeys"
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted, onMounted, nextTick } from 'vue';
 import { usePiano } from '../model/usePiano';
 
 interface Props {
@@ -85,6 +85,25 @@ const whiteKeys = computed(() => {
 const blackKeys = computed(() => {
   const keys = pianoKeys.value.filter(k => k.isBlack);
   return keys.map(k => ({ ...k, keyboardKey: reverseMapping.value[k.midi] }));
+});
+
+const pianoContainerRef = ref<HTMLElement | null>(null);
+const pianoKeysRef = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+  // #region agent log
+  nextTick(() => {
+    const viewportWidth = window.innerWidth;
+    const container = pianoContainerRef.value;
+    const virtualPiano = container?.parentElement;
+    const containerWidth = container?.offsetWidth || 0;
+    const virtualPianoWidth = virtualPiano?.offsetWidth || 0;
+    const containerPadding = container ? window.getComputedStyle(container).paddingLeft : '0';
+    const virtualPianoPadding = virtualPiano ? window.getComputedStyle(virtualPiano).paddingLeft : '0';
+    const isMobile = viewportWidth < 768;
+    fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VirtualPiano.vue:92',message:'Piano width check',data:{viewportWidth,containerWidth,virtualPianoWidth,containerPadding,virtualPianoPadding,isMobile,fullWidth:containerWidth >= viewportWidth - 10},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  });
+  // #endregion
 });
 
 // Вычисляет позицию черной клавиши
@@ -135,18 +154,91 @@ onUnmounted(() => {
   width: 100%;
   max-width: min(900px, 100%);
   height: 180px;
+  min-height: 120px;
   box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .piano-keys {
   display: flex;
   height: 100%;
   gap: 2px;
+  width: 100%;
+}
+
+/* Responsive для мобильных */
+@media (max-width: 768px) {
+  .virtual-piano {
+    padding: 0;
+    width: 100%;
+  }
+  
+  .piano-container {
+    height: 150px;
+    min-height: 100px;
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .piano-key.white {
+    min-width: 0; /* Растягивается для заполнения всей ширины */
+  }
+  
+  .note-label {
+    font-size: 0.65rem;
+  }
+  
+  .piano-key.black .note-label {
+    font-size: 0.55rem;
+  }
+  
+  .keyboard-hint {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .virtual-piano {
+    padding: 0;
+    width: 100%;
+  }
+  
+  .piano-container {
+    height: 120px;
+    min-height: 90px;
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .piano-key.white {
+    min-width: 0; /* Растягивается для заполнения всей ширины */
+  }
+  
+  .note-label {
+    font-size: 0.55rem;
+  }
+  
+  .piano-key.black .note-label {
+    font-size: 0.5rem;
+  }
+  
+  .keyboard-hint {
+    font-size: 0.65rem;
+    top: 4px;
+  }
+  
+  .piano-key {
+    padding-bottom: 6px;
+  }
+  
+  .piano-key.black {
+    padding-bottom: 3px;
+  }
 }
 
 .piano-key {
   position: relative;
-  flex: 1;
   cursor: pointer;
   user-select: none;
   transition: all 0.1s ease;
@@ -158,6 +250,8 @@ onUnmounted(() => {
 }
 
 .piano-key.white {
+  flex: 1 1 0; /* Растягивается для заполнения доступного пространства */
+  min-width: 0; /* Позволяет сжиматься ниже минимальной ширины при необходимости */
   background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
   border: 1px solid #333;
   border-radius: 0 0 4px 4px;

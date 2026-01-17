@@ -84,4 +84,20 @@ function handleClick() {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Responsive для мобильных */
+@media (max-width: 768px) {
+  .base-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .base-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+}
 </style>
