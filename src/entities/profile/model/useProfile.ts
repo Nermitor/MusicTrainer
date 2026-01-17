@@ -1,26 +1,33 @@
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
 import { saveToStorage, loadFromStorage, STORAGE_KEYS } from '@/shared/lib';
 import type { ProfileTypes } from '../types';
 
 /**
  * Composable для работы с профилями пользователя
+ * Использует useState для SSR-совместимого глобального состояния
  */
 export const useProfile = () => {
-  const profiles = ref<ProfileTypes.Profile[]>([]);
+  // Используем useState для SSR-совместимого глобального состояния
+  // useState автоматически синхронизирует состояние между сервером и клиентом
+  const profiles = useState<ProfileTypes.Profile[]>('profiles', () => []);
   
   /**
-   * Загрузить профили из localStorage
+   * Загрузить профили из localStorage (ленивая загрузка)
    */
   const loadProfiles = (): void => {
-    profiles.value = loadFromStorage<ProfileTypes.Profile[]>(STORAGE_KEYS.PROFILES, []) ?? [];
+    // Проверяем, не загружены ли уже профили
+    if (profiles.value.length === 0) {
+      // loadFromStorage уже проверяет SSR, дополнительная проверка не нужна
+      profiles.value = loadFromStorage<ProfileTypes.Profile[]>(STORAGE_KEYS.PROFILES, []) ?? [];
+    }
   };
   
   /**
-   * Сохранить профили в localStorage
+   * Сохранить профили в localStorage (с дебаунсом)
    */
-  const saveProfiles = (): void => {
-    saveToStorage(STORAGE_KEYS.PROFILES, profiles.value);
+  const saveProfiles = (immediate = false): void => {
+    saveToStorage(STORAGE_KEYS.PROFILES, profiles.value, immediate);
   };
   
   /**
@@ -34,7 +41,8 @@ export const useProfile = () => {
     };
     
     profiles.value.push(profile);
-    saveProfiles();
+    // Сохраняем сразу для критичной операции создания
+    saveProfiles(true);
     
     return profile;
   };
@@ -44,7 +52,8 @@ export const useProfile = () => {
    */
   const deleteProfile = (id: string): void => {
     profiles.value = profiles.value.filter((p) => p.id !== id);
-    saveProfiles();
+    // Сохраняем сразу для критичной операции удаления
+    saveProfiles(true);
   };
   
   /**

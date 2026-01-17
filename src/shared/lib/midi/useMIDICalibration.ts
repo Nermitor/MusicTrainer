@@ -17,7 +17,9 @@ export function useMIDICalibration() {
             handleCalibrationMIDI(event, onComplete);
         }
       }).catch((error) => {
-        console.error('MIDI access denied:', error);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('MIDI access denied:', error);
+        }
         calibrationMessage.value = 'Ошибка доступа к MIDI устройству';
         calibrationMode.value = false;
       });

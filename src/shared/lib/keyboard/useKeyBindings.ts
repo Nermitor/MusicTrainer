@@ -16,6 +16,7 @@ function buildKeyboardMapping(bindings: Record<number, string>): Record<string, 
 }
 
 function refreshFromStorage() {
+  if (typeof window === 'undefined') return; // SSR check
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) {
     rawBindings.value = {};
@@ -27,15 +28,22 @@ function refreshFromStorage() {
     rawBindings.value = bindings || {};
     keyboardMapping.value = buildKeyboardMapping(rawBindings.value);
   } catch (e) {
-    console.error('Failed to load custom key bindings:', e);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Failed to load custom key bindings:', e);
+    }
     rawBindings.value = {};
     keyboardMapping.value = {};
   }
 }
 
 function ensureInitialized() {
-  if (!initialized) {
+  if (!initialized && typeof window !== 'undefined') {
+    // Инициализируем синхронно, но только если на клиенте
+    // Это безопасно, так как localStorage доступен только на клиенте
     refreshFromStorage();
+    initialized = true;
+  } else if (!initialized) {
+    // SSR - помечаем как инициализированный, но не читаем localStorage
     initialized = true;
   }
 }
@@ -48,12 +56,15 @@ export function useKeyBindings() {
    * @param bindings - объект, где ключ - MIDI номер, значение - клавиша
    */
   function saveKeyBindings(bindings: Record<number, string>) {
+    if (typeof window === 'undefined') return; // SSR check
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
       rawBindings.value = { ...bindings };
       keyboardMapping.value = buildKeyboardMapping(rawBindings.value);
     } catch (e) {
-      console.error('Failed to save custom key bindings:', e);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Failed to save custom key bindings:', e);
+      }
     }
   }
 
@@ -70,6 +81,7 @@ export function useKeyBindings() {
    * Очищает все пользовательские привязки
    */
   function clearKeyBindings() {
+    if (typeof window === 'undefined') return; // SSR check
     localStorage.removeItem(STORAGE_KEY);
     rawBindings.value = {};
     keyboardMapping.value = {};

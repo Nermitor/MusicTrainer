@@ -1,16 +1,21 @@
 <template>
   <div class="base-slider" :class="{ disabled }">
-    <label v-if="label" class="slider-label">
+    <label v-if="label" :for="inputId" class="slider-label">
       {{ label }}
       <span v-if="showValue" class="slider-value">{{ displayValue }}</span>
     </label>
     <input
+      :id="inputId"
       type="range"
       :min="min"
       :max="max"
       :step="step"
       :value="modelValue"
       :disabled="disabled"
+      :aria-label="label || 'Slider'"
+      :aria-valuemin="min"
+      :aria-valuemax="max"
+      :aria-valuenow="modelValue"
       @input="handleInput"
       class="slider-input"
     />
@@ -18,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 
 interface Props {
   modelValue: number;
@@ -40,6 +45,13 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:modelValue': [value: number];
 }>();
+
+// Генерируем уникальный ID только на клиенте после монтирования для избежания hydration mismatch
+const inputId = ref<string>('slider-input');
+onMounted(() => {
+  // Генерируем ID только на клиенте после монтирования
+  inputId.value = `slider-input-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+});
 
 const displayValue = computed(() => {
   if (props.valueFormatter) {

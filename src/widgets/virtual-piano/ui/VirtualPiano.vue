@@ -91,19 +91,7 @@ const pianoContainerRef = ref<HTMLElement | null>(null);
 const pianoKeysRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
-  // #region agent log
-  nextTick(() => {
-    const viewportWidth = window.innerWidth;
-    const container = pianoContainerRef.value;
-    const virtualPiano = container?.parentElement;
-    const containerWidth = container?.offsetWidth || 0;
-    const virtualPianoWidth = virtualPiano?.offsetWidth || 0;
-    const containerPadding = container ? window.getComputedStyle(container).paddingLeft : '0';
-    const virtualPianoPadding = virtualPiano ? window.getComputedStyle(virtualPiano).paddingLeft : '0';
-    const isMobile = viewportWidth < 768;
-    fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VirtualPiano.vue:92',message:'Piano width check',data:{viewportWidth,containerWidth,virtualPianoWidth,containerPadding,virtualPianoPadding,isMobile,fullWidth:containerWidth >= viewportWidth - 10},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  });
-  // #endregion
+  // Component mounted
 });
 
 // Вычисляет позицию черной клавиши
@@ -153,11 +141,16 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   max-width: min(900px, 100%);
+  /* Фиксированная высота для предотвращения layout shift */
   height: 180px;
   min-height: 120px;
+  /* Используем aspect-ratio для сохранения пропорций на разных экранах */
+  aspect-ratio: 900 / 180;
   box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
+  /* CSS containment для изоляции рендеринга */
+  contain: layout style;
 }
 
 .piano-keys {

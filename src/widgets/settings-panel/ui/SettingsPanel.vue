@@ -3,7 +3,7 @@
     <div class="settings-grid">
       <!-- Ряд 1: Скорость (средняя карточка) -->
       <div class="settings-card medium-card">
-        <h3>⏱️ Скорость</h3>
+        <h2>⏱️ Скорость</h2>
         <BaseCheckbox v-model="noTimer">Без таймера</BaseCheckbox>
         <BaseSlider
           v-model="speed"
@@ -18,14 +18,14 @@
 
       <!-- Ряд 1: Дополнительно (маленькая карточка) -->
       <div class="settings-card small-card">
-        <h3>⚙️ Дополнительно</h3>
+        <h2>⚙️ Дополнительно</h2>
         <BaseCheckbox v-model="withAccidentals">Полутоны</BaseCheckbox>
         <BaseCheckbox v-model="showClef">Показать ключ</BaseCheckbox>
       </div>
 
       <!-- Ряд 2: Ноты (маленькая карточка) -->
       <div class="settings-card small-card">
-        <h3>🎹 Ноты</h3>
+        <h2>🎹 Ноты</h2>
         <BaseRadioGroup
           v-model="octaveRange"
           label="Октава"
@@ -47,7 +47,7 @@
 
       <!-- Ряд 3: Подсказки (средняя карточка) -->
       <div class="settings-card medium-card">
-        <h3>💡 Подсказки</h3>
+        <h2>💡 Подсказки</h2>
         <BaseCheckbox v-model="alwaysShowHint">Всегда показывать</BaseCheckbox>
         <BaseSlider
           v-model="hintDelay"
@@ -74,7 +74,7 @@
         
         <!-- Привязка клавиш -->
         <div class="key-binding-section">
-          <h3>⌨️ Привязка клавиш</h3>
+          <h2>⌨️ Привязка клавиш</h2>
           <p class="hint-text">Настройте привязки клавиш клавиатуры к нотам</p>
           <button class="open-binding-btn" @click="showKeyBindingModal = true">
             🎹 Открыть редактор привязок
@@ -87,10 +87,10 @@
 
       <!-- Режим тренировки - полная ширина (в самом низу) -->
       <div class="settings-card full-width">
-        <h3>🎮 Режим тренировки</h3>
-        <div class="mode-selector">
+        <h2>🎮 Режим тренировки</h2>
+        <div class="mode-selector" role="radiogroup" aria-label="Режим тренировки">
           <label class="mode-option" :class="{ active: trainingMode === 'infinite' }">
-            <input type="radio" value="infinite" v-model="trainingMode" />
+            <input type="radio" name="training-mode" value="infinite" v-model="trainingMode" aria-label="Бесконечный режим" />
             <div class="mode-content">
               <div class="mode-icon">∞</div>
               <div class="mode-name">Бесконечный</div>
@@ -99,7 +99,7 @@
           </label>
           
           <label class="mode-option" :class="{ active: trainingMode === 'exam' }">
-            <input type="radio" value="exam" v-model="trainingMode" />
+            <input type="radio" name="training-mode" value="exam" v-model="trainingMode" aria-label="Экзамен" />
             <div class="mode-content">
               <div class="mode-icon">📝</div>
               <div class="mode-name">Экзамен</div>
@@ -108,7 +108,7 @@
           </label>
           
           <label class="mode-option" :class="{ active: trainingMode === 'timed' }">
-            <input type="radio" value="timed" v-model="trainingMode" />
+            <input type="radio" name="training-mode" value="timed" v-model="trainingMode" aria-label="На время" />
             <div class="mode-content">
               <div class="mode-icon">⏱️</div>
               <div class="mode-name">На время</div>
@@ -117,7 +117,7 @@
           </label>
           
           <label class="mode-option" :class="{ active: trainingMode === 'survival' }">
-            <input type="radio" value="survival" v-model="trainingMode" />
+            <input type="radio" name="training-mode" value="survival" v-model="trainingMode" aria-label="Выживание" />
             <div class="mode-content">
               <div class="mode-icon">❤️</div>
               <div class="mode-name">Выживание</div>
@@ -205,7 +205,18 @@ const showKeyBindingModal = ref(false);
 const { rawBindings, refresh } = useKeyBindings();
 
 onMounted(() => {
-  refresh();
+  // Откладываем refresh через requestIdleCallback для улучшения FCP/LCP
+  // Привязки клавиш не критичны для первого рендера
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(() => {
+      refresh();
+    }, { timeout: 1000 });
+  } else {
+    // Fallback - загружаем после первого frame
+    requestAnimationFrame(() => {
+      refresh();
+    });
+  }
 });
 
 function handleKeyBindingModalClose() {
@@ -245,6 +256,11 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
   flex-direction: column;
   gap: 1rem;
   transition: all 0.3s ease;
+  /* Предотвращение layout shift - фиксируем минимальную высоту */
+  min-height: 120px;
+  box-sizing: border-box;
+  /* CSS containment для изоляции рендеринга */
+  contain: layout style;
 }
 
 /* Маленькая карточка - 1 колонка */
@@ -273,7 +289,7 @@ const bindingsCount = computed(() => Object.keys(rawBindings.value).length);
   grid-column: 1 / -1;
 }
 
-.settings-card h3 {
+.settings-card h2 {
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
   color: #fff;

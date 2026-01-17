@@ -11,14 +11,17 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/',
-        'src/test/',
-        '**/*.d.ts',
-        '**/*.config.*',
-        '**/mockData',
-        'src/main.ts',
-      ],
+        exclude: [
+          'node_modules/',
+          'src/test/',
+          '**/*.d.ts',
+          '**/*.config.*',
+          '**/mockData',
+          'src/app/main.ts', // Old entry point
+          '.nuxt/**',
+          '.output/**',
+          'dist/**',
+        ],
     },
   },
   resolve: {

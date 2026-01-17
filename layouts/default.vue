@@ -7,16 +7,16 @@
         <h1 class="app-title">Музыкальный тренажёр</h1>
       </div>
       <div class="header-right">
-        <BaseButton v-if="currentView === 'settings'" @click="viewStatistics">
+        <BaseButton v-if="isSettingsPage" @click="navigateTo('/statistics')">
           📊 Статистика
         </BaseButton>
-        <BaseButton v-if="currentView === 'settings'" @click="showProfileModal = true">
+        <BaseButton v-if="isSettingsPage" @click="showProfileModal = true">
           📁 Профили
         </BaseButton>
-        <BaseButton v-if="currentView === 'statistics'" @click="currentView = 'settings'">
+        <BaseButton v-if="isStatisticsPage" @click="navigateTo('/')">
           ⬅ К настройкам
         </BaseButton>
-        <BaseButton v-if="currentView === 'training' && !showResults" variant="danger" @click="stop">
+        <BaseButton v-if="isTrainingPage && !showResults" variant="danger" @click="handleStop">
           ⏹ Завершить
         </BaseButton>
       </div>
@@ -24,53 +24,7 @@
 
     <!-- Main Content -->
     <main class="app-main">
-      <!-- Settings Page -->
-      <SettingsPage
-        v-if="currentView === 'settings'"
-        v-model="settings"
-        @start="start"
-        @start-calibration="startCalibration"
-      />
-
-      <!-- Training View -->
-      <div v-else-if="currentView === 'training' && !showResults" class="training-view">
-        <NotationTrainer
-          ref="notationTrainerRef"
-          :speed="settings.speed"
-          :with-accidentals="settings.withAccidentals"
-          :no-timer="settings.noTimer"
-          :show-clef="settings.showClef"
-          :always-show-hint="settings.alwaysShowHint"
-          :hint-delay="settings.hintDelay"
-          :octave-range="settings.octaveRange"
-          :location-range="settings.locationRange"
-          :training-mode="settings.trainingMode"
-          :instrument-type="settings.instrumentType"
-          :midi-calibration="settings.midiCalibration"
-          :input-mode="settings.inputMode"
-          :enable-keyboard-input="settings.enableKeyboardInput"
-          @stop="stop"
-          @note-attempt="handleNoteAttempt"
-        />
-      </div>
-
-      <!-- Results View -->
-      <ResultsView
-        v-else-if="showResults && lastCompletedSession"
-        :session="lastCompletedSession"
-        :mode="settings.trainingMode"
-        @restart="start"
-        @back-to-settings="backToSettings"
-        @view-statistics="viewStatistics(); showResults = false"
-      />
-
-      <!-- Statistics View -->
-      <StatisticsView
-        v-if="currentView === 'statistics'"
-        :statistics="statisticsStore.statistics.value"
-        :sessions="statisticsStore.getRecentSessions(20)"
-        @clear-statistics="handleClearStatistics"
-      />
+      <slot />
     </main>
 
     <!-- Footer -->
@@ -78,7 +32,7 @@
       <div class="footer-content">
         <span>Музыкальный тренажёр © 2026</span>
         <span class="footer-separator">•</span>
-        <span>Версия 2.0 (FSD)</span>
+        <span>Версия 3.0 (Nuxt 3)</span>
       </div>
     </footer>
 
@@ -94,28 +48,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import type { TrainingSettings, NoteAttempt } from '@/shared/types';
-import type { ProfileTypes } from '@/entities/profile';
-import type { SessionTypes } from '@/entities/session';
+import { ref, computed, onMounted, provide } from 'vue';
+import { useRoute } from 'vue-router';
 import { BaseButton } from '@/shared/ui';
-import { useMIDICalibration } from '@/shared/lib';
-import { SettingsPage } from '@/pages/settings';
 import { ProfileManager } from '@/features/profile-manager';
 import { useProfile } from '@/entities/profile';
-import { useStatistics } from '@/entities/statistics';
-import { useSession } from '@/entities/session';
-import { NotationTrainer } from '@/widgets/notation-trainer';
-import { ResultsView } from '@/widgets/results-view';
-import { StatisticsView } from '@/widgets/statistics-view';
+import type { TrainingSettings } from '@/shared/types';
+import type { ProfileTypes } from '@/entities/profile';
 
-type ViewMode = 'settings' | 'training' | 'statistics';
-
-const currentView = ref<ViewMode>('settings');
+const route = useRoute();
+const profileStore = useProfile();
 const showProfileModal = ref(false);
 const showResults = ref(false);
-const notationTrainerRef = ref<InstanceType<typeof NotationTrainer> | null>(null);
-const lastCompletedSession = ref<SessionTypes.Session | null>(null);
+
+// Определение текущей страницы
+const isSettingsPage = computed(() => route.path === '/');
+const isStatisticsPage = computed(() => route.path === '/statistics');
+const isTrainingPage = computed(() => route.path === '/training');
 
 const settings = ref<TrainingSettings>({
   speed: 1,
@@ -133,52 +82,9 @@ const settings = ref<TrainingSettings>({
   enableKeyboardInput: true,
 });
 
-const profileStore = useProfile();
-const statisticsStore = useStatistics();
-const sessionStore = useSession();
-
-// MIDI Calibration composable
-const { startCalibration: startMIDICalibration } = useMIDICalibration();
-
-onMounted(() => {
-  profileStore.loadProfiles();
-  statisticsStore.loadStatistics();
-});
-
-function start() {
-  sessionStore.startSession(settings.value.trainingMode, settings.value);
-  currentView.value = 'training';
-  showResults.value = false;
-  lastCompletedSession.value = null;
-}
-
-function stop() {
-  const completedSession = sessionStore.endSession();
-  if (completedSession) {
-    statisticsStore.addSession(completedSession);
-    lastCompletedSession.value = completedSession;
-  }
-  showResults.value = true;
-}
-
-function backToSettings() {
-  currentView.value = 'settings';
-  showResults.value = false;
-}
-
-function viewStatistics() {
-  currentView.value = 'statistics';
-}
-
-function handleNoteAttempt(attempt: NoteAttempt) {
-  sessionStore.addAttempt(attempt.noteName, attempt.midi, attempt.correct, attempt.reactionTime);
-}
-
-// MIDI Calibration
-function startCalibration() {
-  startMIDICalibration((offset: number) => {
-    settings.value.midiCalibration = offset;
-  });
+function handleStop() {
+  // Эта функция будет переопределена в training.vue через provide/inject или событие
+  navigateTo('/');
 }
 
 // Profile Management
@@ -210,12 +116,12 @@ function deleteProfile(id: string) {
   profileStore.deleteProfile(id);
 }
 
-// Statistics
-function handleClearStatistics() {
-  if (confirm('Вы уверены, что хотите удалить всю статистику? Это действие необратимо.')) {
-    statisticsStore.clearStatistics();
-  }
-}
+// Предоставляем настройки для дочерних компонентов
+provide('settings', settings);
+
+onMounted(() => {
+  profileStore.loadProfiles();
+});
 </script>
 
 <style scoped>
@@ -245,12 +151,19 @@ function handleClearStatistics() {
   top: 0;
   z-index: 100;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  /* Фиксируем высоту для предотвращения layout shift */
+  min-height: 70px;
+  box-sizing: border-box;
+  /* CSS containment для изоляции */
+  contain: layout style;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .app-logo {
@@ -283,46 +196,12 @@ function handleClearStatistics() {
   flex-shrink: 0;
 }
 
-.header-left {
-  flex: 1;
-  min-width: 0; /* Позволяет сжиматься при необходимости */
-}
-
 /* Main Content */
 .app-main {
   flex: 1;
   display: flex;
   overflow-y: auto;
   position: relative;
-}
-
-/* Training View */
-.training-view {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 2rem;
-  gap: 1rem;
-  overflow-y: auto;
-  overflow-x: hidden;
-  box-sizing: border-box;
-}
-
-@media (max-width: 768px) {
-  .training-view {
-    padding: 1rem 0;
-    gap: 0.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .training-view {
-    padding: 0.75rem 0;
-    gap: 0.5rem;
-  }
 }
 
 /* Footer */
@@ -332,6 +211,11 @@ function handleClearStatistics() {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
   flex-shrink: 0;
+  /* Фиксируем минимальную высоту для предотвращения layout shift */
+  min-height: 60px;
+  box-sizing: border-box;
+  /* CSS containment для изоляции */
+  contain: layout style;
 }
 
 .footer-content {
@@ -418,4 +302,3 @@ function handleClearStatistics() {
   background: rgba(255, 255, 255, 0.3);
 }
 </style>
-

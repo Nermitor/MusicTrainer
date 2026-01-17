@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
-import { Renderer, Stave, StaveNote, Accidental, Voice, Formatter, Stem } from 'vexflow';
-import * as Tone from 'tone';
+// Динамические импорты для оптимизации загрузки - загружаем только при необходимости
+let VexFlow: typeof import('vexflow') | null = null;
+let Tone: typeof import('tone') | null = null;
 import { VirtualPiano } from '@/widgets/virtual-piano';
 import { useKeyBindings } from '@/shared/lib';
 
@@ -159,27 +160,54 @@ function getRuName(noteName: string) {
 function setRandomNoteAndSound() {
   const notes = allNotes.value;
   note.value = notes[Math.floor(Math.random() * notes.length)];
+  // Воспроизводим звук немедленно для UX, но асинхронно (не блокирует)
   playMidiNoteSound(expectedMidi.value);
   if (!props.noTimer) countdown.value = props.speed;
   startHintTimer();
   noteStartTime.value = Date.now();
 }
 
-function drawNote() {
+async function drawNote() {
   if (!canvasRef.value) return;
-  canvasRef.value.innerHTML = '';
+  // Загружаем VexFlow динамически, если еще не загружен
+  if (!VexFlow) {
+    VexFlow = await import('vexflow');
+  }
+  const { Renderer, Stave, StaveNote, Accidental, Voice, Formatter, Stem } = VexFlow;
+  
+  // Используем requestAnimationFrame для предотвращения блокировки при очистке DOM
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      if (canvasRef.value) {
+        canvasRef.value.innerHTML = '';
+      }
+      resolve();
+    });
+  });
   
   const viewportWidth = window.innerWidth;
   const canvasElement = canvasRef.value;
-  const canvasRect = canvasElement.getBoundingClientRect();
-  // Используем реальную ширину элемента для пропорционального масштабирования
-  const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
   const isMobile = viewportWidth < 768;
   
-  // Получаем размеры белого пространства (notation block)
-  const notationBlock = canvasElement.parentElement;
-  const blockWidth = notationBlock?.offsetWidth || actualCanvasWidth;
-  const blockHeight = notationBlock?.offsetHeight || actualCanvasWidth * 0.44;
+  // Оптимизация: используем requestAnimationFrame для чтения layout свойств
+  // Это предотвращает forced reflow (layout thrashing) - читаем все layout свойства в одном frame
+  const { actualCanvasWidth, blockWidth, blockHeight } = await new Promise<{
+    actualCanvasWidth: number;
+    blockWidth: number;
+    blockHeight: number;
+  }>((resolve) => {
+    requestAnimationFrame(() => {
+      const canvasRect = canvasElement.getBoundingClientRect();
+      const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
+      
+      // Получаем размеры белого пространства (notation block)
+      const notationBlock = canvasElement.parentElement;
+      const blockWidth = notationBlock?.offsetWidth || actualCanvasWidth;
+      const blockHeight = notationBlock?.offsetHeight || actualCanvasWidth * 0.44;
+      
+      resolve({ actualCanvasWidth, blockWidth, blockHeight });
+    });
+  });
   
   // Нотный стан должен занимать 80% белого пространства
   const targetStaveWidth = blockWidth * 0.8;
@@ -207,10 +235,6 @@ function drawNote() {
   const baseCanvasHeight = Math.max(150, Math.round(targetStaveHeight / (scaleFactor * 2))); // Делим на finalScaleFactor
   const canvasHeight = baseCanvasHeight * 2; // Увеличиваем высоту в 2 раза для масштабированных символов
   
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NotationTrainer.vue:205',message:'Notation block and stave sizing for 80%',data:{viewportWidth,blockWidth,blockHeight,targetStaveWidth,targetStaveHeight,actualCanvasWidth,canvasWidth,canvasHeight,scaleFactor,baseStaveWidth},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-  
   // Используем canvasWidth/canvasHeight для renderer, но масштабируем контекст
   const renderer = new Renderer(canvasElement, Renderer.Backends.SVG);
   renderer.resize(canvasWidth, canvasHeight);
@@ -234,10 +258,6 @@ function drawNote() {
   const targetScaledStaveY = baseHeight * 0.45; // Целевая позиция Y после масштабирования (45% от baseHeight)
   const baseStaveY = targetScaledStaveY / finalScaleFactor;
   const scaledStaveY = baseStaveY;
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/3c40603c-35d1-4e92-9c45-82d91d6ada65',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NotationTrainer.vue:214',message:'Stave positioning with 2x mobile scale',data:{isMobile,finalScaleFactor,scaleFactor,scaledStaveX,scaledStaveY,baseStaveY,scaledStaveWidth,baseHeight,baseWidth,canvasHeight,canvasWidth},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   
   const stave = new Stave(scaledStaveX, scaledStaveY, scaledStaveWidth);
   if (props.showClef) {
@@ -278,36 +298,59 @@ function drawNote() {
 // Создаем синтезатор в зависимости от выбранного инструмента
 let currentSynth: any = null;
 
-function createSynth() {
+async function createSynth() {
+  // Загружаем Tone.js динамически, если еще не загружен
+  if (!Tone) {
+    Tone = await import('tone');
+  }
+  const { Synth, PluckSynth, MembraneSynth, FMSynth } = Tone;
+  
   // Dispose старого синтезатора, если он есть
   if (currentSynth) {
-    currentSynth.dispose();
+    try {
+      // Отключаем от destination перед dispose
+      if (currentSynth.disconnect) {
+        currentSynth.disconnect();
+      }
+      // Вызываем dispose для освобождения ресурсов
+      if (currentSynth.dispose) {
+        currentSynth.dispose();
+      }
+    } catch (error) {
+      // Игнорируем ошибки dispose в production (проверяем через window для SSR-безопасности)
+      const isDev = typeof window !== 'undefined' && (window as any).__DEV__ !== false;
+      if (isDev) {
+        console.error('Error disposing old synth:', error);
+      }
+    } finally {
+      currentSynth = null;
+    }
   }
   
   switch (props.instrumentType) {
     case 'piano':
-      currentSynth = new Tone.Synth({
+      currentSynth = new Synth({
         oscillator: { type: 'sine' },
         envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 }
       }).toDestination();
       break;
     case 'synth':
-      currentSynth = new Tone.Synth({
+      currentSynth = new Synth({
         oscillator: { type: 'square' },
         envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8 }
       }).toDestination();
       break;
     case 'guitar':
-      currentSynth = new Tone.PluckSynth().toDestination();
+      currentSynth = new PluckSynth().toDestination();
       break;
     case 'bass':
-      currentSynth = new Tone.MembraneSynth().toDestination();
+      currentSynth = new MembraneSynth().toDestination();
       break;
     case 'organ':
-      currentSynth = new Tone.FMSynth().toDestination();
+      currentSynth = new FMSynth().toDestination();
       break;
     default:
-      currentSynth = new Tone.Synth().toDestination();
+      currentSynth = new Synth().toDestination();
   }
 }
 
@@ -455,6 +498,10 @@ function midiNumberToName(midi: number): string {
 }
 let toneStartPromise: Promise<void> | null = null;
 async function ensureToneStarted() {
+  // Загружаем Tone.js динамически, если еще не загружен
+  if (!Tone) {
+    Tone = await import('tone');
+  }
   if (!toneStartPromise) {
     toneStartPromise = Tone.start();
   }
@@ -467,62 +514,104 @@ function midiNumberToRu(midi: number): string {
 }
 
 // Универсальная функция обработки нажатия ноты (из любого источника ввода)
+// Оптимизирована для FID/INP - минимизация блокирующего кода
 function handleNotePress(pressedMidi: number) {
-  lastMidiNote.value = pressedMidi;
-  lastMidiName.value = midiNumberToName(pressedMidi);
-  lastMidiRu.value = midiNumberToRu(pressedMidi);
-  playMidiNoteSound(pressedMidi);
-  
+  // Критичные обновления выполняем сразу
   const isCorrect = pressedMidi === expectedMidi.value;
   const reactionTime = Date.now() - noteStartTime.value;
   
-  // Отправить попытку в статистику
-  emit('noteAttempt', {
-    noteName: note.value.name,
-    midi: note.value.midi,
-    correct: isCorrect,
-    reactionTime,
-    timestamp: Date.now()
+  // Обновляем состояние для визуальной обратной связи (используем RAF для оптимизации)
+  requestAnimationFrame(() => {
+    lastMidiNote.value = pressedMidi;
+    lastMidiName.value = midiNumberToName(pressedMidi);
+    lastMidiRu.value = midiNumberToRu(pressedMidi);
+    midiMatched.value = isCorrect ? true : false;
   });
   
-  if (isCorrect) {
-    midiMatched.value = true;
-    stopHintTimer();
-    notesCompleted.value++;
-    
-    // Проверить условия завершения режимов
-    if (props.trainingMode === 'exam' && notesCompleted.value >= 20) {
-      scheduleTimeout(() => {
-        stop();
-      }, 500);
-      return;
-    }
-    
-    scheduleTimeout(() => {
-      midiMatched.value = null;
-      setRandomNoteAndSound();
-      scheduleTimeout(() => {
-        lastMidiNote.value = null;
-        lastMidiName.value = '';
-        lastMidiRu.value = '';
-      }, 200);
-    }, 500);
+  // Воспроизводим звук асинхронно (не блокирует main thread)
+  playMidiNoteSound(pressedMidi);
+  
+  // Отправляем статистику через requestIdleCallback для не-критичной операции
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(() => {
+      emit('noteAttempt', {
+        noteName: note.value.name,
+        midi: note.value.midi,
+        correct: isCorrect,
+        reactionTime,
+        timestamp: Date.now()
+      });
+    }, { timeout: 1000 });
   } else {
-    midiMatched.value = false;
-    
-    // Обработка режима выживания
-    if (props.trainingMode === 'survival') {
-      livesRemaining.value--;
-      if (livesRemaining.value <= 0) {
-        scheduleTimeout(() => {
-          stop();
-        }, 500);
+    // Fallback для браузеров без requestIdleCallback
+    setTimeout(() => {
+      emit('noteAttempt', {
+        noteName: note.value.name,
+        midi: note.value.midi,
+        correct: isCorrect,
+        reactionTime,
+        timestamp: Date.now()
+      });
+    }, 0);
+  }
+  
+  // Обрабатываем результат - используем двойной RAF для предотвращения блокировки
+  // Первый RAF для критичных обновлений UI
+  requestAnimationFrame(() => {
+    if (isCorrect) {
+      stopHintTimer();
+      notesCompleted.value++;
+      
+      // Проверить условия завершения режимов - используем requestIdleCallback для не-критичной проверки
+      if (props.trainingMode === 'exam' && notesCompleted.value >= 20) {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => {
+            stop();
+          }, { timeout: 500 });
+        } else {
+          scheduleTimeout(() => stop(), 500);
+        }
         return;
       }
+      
+      // Используем второй RAF для отложенных обновлений
+      requestAnimationFrame(() => {
+        scheduleTimeout(() => {
+          midiMatched.value = null;
+          setRandomNoteAndSound();
+          scheduleTimeout(() => {
+            lastMidiNote.value = null;
+            lastMidiName.value = '';
+            lastMidiRu.value = '';
+          }, 200);
+        }, 500);
+      });
+    } else {
+      // Обработка режима выживания - используем requestIdleCallback
+      if (props.trainingMode === 'survival') {
+        livesRemaining.value--;
+        if (livesRemaining.value <= 0) {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => {
+              stop();
+            }, { timeout: 500 });
+          } else {
+            scheduleTimeout(() => stop(), 500);
+          }
+          return;
+        }
+      }
+      
+      // Используем requestIdleCallback для очистки состояния
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => {
+          midiMatched.value = null;
+        }, { timeout: 500 });
+      } else {
+        scheduleTimeout(() => { midiMatched.value = null; }, 500);
+      }
     }
-    
-    scheduleTimeout(() => { midiMatched.value = null; }, 500);
-  }
+  });
 }
 
 function handleMIDIMessage(event: MIDIMessageEvent) {
@@ -554,33 +643,91 @@ function handleVirtualPianoPress(midi: number) {
   handleNotePress(midi);
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Загружаем библиотеки параллельно (не блокирует начальный рендер благодаря ClientOnly)
+  const [vexflowModule, toneModule] = await Promise.all([
+    import('vexflow'),
+    import('tone')
+  ]);
+  VexFlow = vexflowModule;
+  Tone = toneModule;
+  
+  // Критичные операции выполняем сразу
   initializeMode();
   setRandomNoteAndSound();
-  nextTick(drawNote);
+  
+  // Отрисовку ноты откладываем на следующий frame для предотвращения блокировки
+  requestAnimationFrame(async () => {
+    await drawNote();
+  });
+  
   if (!props.noTimer) startInterval();
   window.addEventListener('keydown', onKeydown);
   
-  // Инициализируем синтезатор
-  createSynth();
+  // Инициализацию синтезатора откладываем через requestIdleCallback (не-критичная операция)
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(async () => {
+      await createSynth();
+    }, { timeout: 500 });
+  } else {
+    // Fallback - создаем сразу, но асинхронно
+    createSynth();
+  }
   
-  // Подключаем MIDI, если это режим MIDI
-  if (props.inputMode === 'midi') {
-    if (navigator.requestMIDIAccess) {
-      navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+  // Подключаем MIDI, если это режим MIDI - используем requestIdleCallback для не-критичной операции
+  if (props.inputMode === 'midi' && typeof navigator !== 'undefined') {
+    if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
+      const connectMIDI = () => {
+        navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+      };
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(connectMIDI, { timeout: 2000 });
+      } else {
+        setTimeout(connectMIDI, 500);
+      }
     } else {
       midiStatus.value = 'Web MIDI API не поддерживается';
     }
   }
 });
 onUnmounted(() => {
+  // Очищаем все интервалы и таймауты
   clearIntervalIfNeeded();
   stopModeTimer();
-  window.removeEventListener('keydown', onKeydown);
-  if (currentSynth) {
-    currentSynth.dispose();
-    currentSynth = null;
+  stopCountdown();
+  stopHintTimer();
+  clearPendingTimeouts();
+  
+  // Удаляем слушатели событий
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', onKeydown);
   }
+  
+  // Правильно dispose синтезатора Tone.js
+  if (currentSynth) {
+    try {
+      // Отключаем от destination перед dispose
+      if (currentSynth.disconnect) {
+        currentSynth.disconnect();
+      }
+      // Вызываем dispose для освобождения ресурсов
+      if (currentSynth.dispose) {
+        currentSynth.dispose();
+      }
+    } catch (error) {
+      // Игнорируем ошибки dispose в production
+      // Игнорируем ошибки dispose в production (проверяем через window для SSR-безопасности)
+      const isDev = typeof window !== 'undefined' && (window as any).__DEV__ !== false;
+      if (isDev) {
+        console.error('Error disposing synth:', error);
+      }
+    } finally {
+      currentSynth = null;
+    }
+  }
+  
+  // Очищаем promise для Tone.start()
+  toneStartPromise = null;
 });
 
 watch(() => props.speed, startInterval);
@@ -596,13 +743,14 @@ watch(() => props.locationRange, () => {
   setRandomNoteAndSound();
   startInterval();
 });
-watch(() => props.instrumentType, () => {
+watch(() => props.instrumentType, async () => {
   // Пересоздаем синтезатор при смене инструмента
-  createSynth();
+  await createSynth();
 });
 watch(() => props.inputMode, (newMode) => {
   // При смене режима ввода, переинициализируем MIDI если нужно
-  if (newMode === 'midi' && navigator.requestMIDIAccess) {
+  // Проверяем navigator для SSR-безопасности
+  if (newMode === 'midi' && typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
     navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
   }
 });
@@ -615,7 +763,7 @@ watch(() => props.noTimer, (noTimer) => {
   }
 });
 watch(note, () => {
-  nextTick(drawNote);
+  nextTick(() => drawNote());
 });
 
 // Expose необходимые свойства и методы для родительского компонента
@@ -694,7 +842,10 @@ defineExpose({
   position: relative;
   width: 100%;
   max-width: 500px;
+  /* Резервируем минимальную высоту для предотвращения CLS */
   min-height: 180px;
+  /* Используем aspect-ratio для сохранения пропорций */
+  aspect-ratio: 500 / 220;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -720,11 +871,16 @@ defineExpose({
   max-width: 100%;
   height: auto;
   min-height: 150px;
+  /* Используем aspect-ratio для предотвращения layout shift */
   aspect-ratio: 500 / 220;
+  /* Резервируем место для контента - предотвращаем CLS */
+  contain: layout style paint;
   cursor: pointer;
   box-sizing: border-box;
   display: block;
   overflow: visible;
+  /* Фиксируем размеры для предотвращения сдвигов */
+  will-change: auto;
 }
 .tooltip {
   position: absolute;
@@ -795,6 +951,10 @@ defineExpose({
   border-radius: 16px;
   box-sizing: border-box;
   overflow-x: hidden;
+  /* Резервируем минимальную высоту для предотвращения CLS */
+  min-height: 220px;
+  /* CSS containment для изоляции рендеринга */
+  contain: layout style;
 }
 
 @media (max-width: 768px) {

@@ -1,0 +1,7 @@
+const a = ".profile-manager[data-v-d346707b]{gap:2rem}.profile-manager[data-v-d346707b],.save-section[data-v-d346707b]{display:flex;flex-direction:column}.save-section[data-v-d346707b]{gap:1rem}.save-button[data-v-d346707b]{background:#42b88333;border:2px dashed rgba(66,184,131,.5);border-radius:12px;color:#42b883;cursor:pointer;font-size:1rem;font-weight:500;padding:1rem;transition:all .3s}.save-button[data-v-d346707b]:hover{background:#42b8834d;border-color:#42b883}.save-form[data-v-d346707b]{display:flex;flex-direction:column;gap:1rem}.profile-input[data-v-d346707b]{background:#ffffff0d;border:1px solid hsla(0,0%,100%,.2);border-radius:8px;color:#fff;font-size:1rem;padding:.8rem 1rem;text-align:left}.profile-input[data-v-d346707b]::-moz-placeholder{color:#fff6}.profile-input[data-v-d346707b]::placeholder{color:#fff6}.save-actions[data-v-d346707b]{display:flex;gap:.8rem}.profiles-list h4[data-v-d346707b]{color:#fffc;font-size:1rem;font-weight:500;margin:0 0 1rem}.profile-grid[data-v-d346707b]{display:flex;flex-direction:column;gap:1rem}.profile-card[data-v-d346707b]{align-items:center;background:#ffffff08;border:1px solid hsla(0,0%,100%,.1);border-radius:10px;display:flex;gap:1rem;justify-content:space-between;padding:1rem}.profile-card h5[data-v-d346707b]{color:#fff;flex:1;font-size:1rem;margin:0;text-align:left}.profile-actions[data-v-d346707b]{display:flex;gap:.5rem}.empty-state[data-v-d346707b]{color:#ffffff80;padding:2rem;text-align:center}";
+
+const ProfileManagerStylesCCmY2ocO = [
+  a
+];
+
+export { ProfileManagerStylesCCmY2ocO as default };

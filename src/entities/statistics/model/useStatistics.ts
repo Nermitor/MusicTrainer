@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import type { TrainingSession, NoteAttempt } from '@/shared/types';
 import { saveToStorage, loadFromStorage, STORAGE_KEYS } from '@/shared/lib';
 import type { StatisticsTypes } from '../types';
@@ -14,18 +14,20 @@ const DEFAULT_STATISTICS: StatisticsTypes.Statistics = {
   noteStats: {},
 };
 
-// Глобальное состояние статистики
-const statistics = ref<StatisticsTypes.Statistics>({ ...DEFAULT_STATISTICS });
-
 /**
  * Composable для работы со статистикой тренировок
+ * Использует useState для SSR-совместимого глобального состояния
  */
 export const useStatistics = () => {
+  // Используем useState для SSR-совместимого глобального состояния
+  // useState автоматически синхронизирует состояние между сервером и клиентом
+  const statistics = useState<StatisticsTypes.Statistics>('statistics', () => ({ ...DEFAULT_STATISTICS }));
   
   /**
    * Загрузить статистику из localStorage
    */
   const loadStatistics = (): void => {
+    // loadFromStorage уже проверяет SSR, дополнительная проверка не нужна
     statistics.value = loadFromStorage<StatisticsTypes.Statistics>(
       STORAGE_KEYS.STATISTICS,
       DEFAULT_STATISTICS
@@ -33,10 +35,10 @@ export const useStatistics = () => {
   };
   
   /**
-   * Сохранить статистику в localStorage
+   * Сохранить статистику в localStorage (с дебаунсом)
    */
-  const saveStatistics = (): void => {
-    saveToStorage(STORAGE_KEYS.STATISTICS, statistics.value);
+  const saveStatistics = (immediate = false): void => {
+    saveToStorage(STORAGE_KEYS.STATISTICS, statistics.value, immediate);
   };
   
   /**
