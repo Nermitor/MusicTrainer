@@ -18,8 +18,9 @@ export default defineNuxtConfig({
 
   // Base URL для GitHub Pages
   // Используем проверку CI окружения для правильной работы с GitHub Pages
+  // В GitHub Actions переменные CI и GITHUB_ACTIONS всегда установлены как 'true'
   app: {
-    baseURL: process.env.CI || process.env.GITHUB_ACTIONS ? '/MusicTrainer/' : '/',
+    baseURL: (process.env.CI || process.env.GITHUB_ACTIONS) ? '/MusicTrainer/' : '/',
     buildAssetsDir: '/_nuxt/',
     // Оптимизация head для SSR
     head: {
