@@ -126,6 +126,12 @@ const lastMidiNote = ref<null | number>(null);
 const lastMidiName = ref('');
 const lastMidiRu = ref('');
 
+// Флаг для отслеживания инициализации аудио (требуется взаимодействие пользователя)
+const audioInitialized = ref(false);
+let audioInitHandlersAttached = false;
+// Флаг для предотвращения одновременных вызовов playMidiNoteSound
+let isPlayingSound = false;
+
 // Режимы тренировки
 const notesCompleted = ref(0);
 const livesRemaining = ref(3);
@@ -160,8 +166,10 @@ function getRuName(noteName: string) {
 function setRandomNoteAndSound() {
   const notes = allNotes.value;
   note.value = notes[Math.floor(Math.random() * notes.length)];
-  // Воспроизводим звук немедленно для UX, но асинхронно (не блокирует)
-  playMidiNoteSound(expectedMidi.value);
+  // Воспроизводим звук только после инициализации аудио (требуется взаимодействие пользователя)
+  if (audioInitialized.value) {
+    playMidiNoteSound(expectedMidi.value);
+  }
   if (!props.noTimer) countdown.value = props.speed;
   startHintTimer();
   noteStartTime.value = Date.now();
@@ -355,16 +363,38 @@ async function createSynth() {
 }
 
 async function playMidiNoteSound(midi: number) {
-  await ensureToneStarted();
-  if (!currentSynth) {
-    createSynth();
+  // Защита от одновременных вызовов - предотвращает ошибку "Start time must be strictly greater"
+  if (isPlayingSound) {
+    return;
   }
-  const name = midiNumberToName(midi);
   
-  if (props.instrumentType === 'bass' || props.instrumentType === 'guitar') {
-    currentSynth.triggerAttackRelease(name, '4n');
-  } else {
-    currentSynth.triggerAttackRelease(name, '8n');
+  // Не воспроизводим звук, если аудио еще не инициализировано
+  if (!audioInitialized.value) {
+    return;
+  }
+  
+  isPlayingSound = true;
+  
+  try {
+    await ensureToneStarted();
+    if (!currentSynth) {
+      await createSynth();
+    }
+    const name = midiNumberToName(midi);
+    
+    if (props.instrumentType === 'bass' || props.instrumentType === 'guitar') {
+      currentSynth.triggerAttackRelease(name, '4n');
+    } else {
+      currentSynth.triggerAttackRelease(name, '8n');
+    }
+    
+    // Сбрасываем флаг после небольшой задержки, чтобы предотвратить слишком частые вызовы
+    setTimeout(() => {
+      isPlayingSound = false;
+    }, 100);
+  } catch (error) {
+    isPlayingSound = false;
+    throw error;
   }
 }
 
@@ -507,6 +537,28 @@ async function ensureToneStarted() {
   }
   await toneStartPromise;
 }
+
+// Инициализация аудио при первом взаимодействии пользователя
+async function initializeAudioOnUserInteraction() {
+  if (audioInitialized.value) return;
+  
+  // Импортируем Tone.js только при первом взаимодействии пользователя
+  // Это предотвращает автоматическое создание AudioContext при импорте
+  if (!Tone) {
+    Tone = await import('tone');
+  }
+  
+  audioInitialized.value = true;
+  
+  // Инициализируем Tone.js и синтезатор
+  await ensureToneStarted();
+  if (!currentSynth) {
+    await createSynth();
+  }
+  
+  // НЕ воспроизводим звук здесь - звук будет воспроизведен при взаимодействии пользователя
+  // Это предотвращает двойной вызов playMidiNoteSound и ошибку "Start time must be strictly greater"
+}
 function midiNumberToRu(midi: number): string {
   const name = midiNumberToName(midi);
   const match = name.match(/^([A-G]#?)/);
@@ -515,7 +567,12 @@ function midiNumberToRu(midi: number): string {
 
 // Универсальная функция обработки нажатия ноты (из любого источника ввода)
 // Оптимизирована для FID/INP - минимизация блокирующего кода
-function handleNotePress(pressedMidi: number) {
+async function handleNotePress(pressedMidi: number) {
+  // Инициализируем аудио при первом взаимодействии пользователя (ЖДЕМ завершения)
+  if (!audioInitialized.value) {
+    await initializeAudioOnUserInteraction();
+  }
+  
   // Критичные обновления выполняем сразу
   const isCorrect = pressedMidi === expectedMidi.value;
   const reactionTime = Date.now() - noteStartTime.value;
@@ -576,15 +633,15 @@ function handleNotePress(pressedMidi: number) {
       
       // Используем второй RAF для отложенных обновлений
       requestAnimationFrame(() => {
-        scheduleTimeout(() => {
-          midiMatched.value = null;
-          setRandomNoteAndSound();
           scheduleTimeout(() => {
-            lastMidiNote.value = null;
-            lastMidiName.value = '';
-            lastMidiRu.value = '';
-          }, 200);
-        }, 500);
+            midiMatched.value = null;
+            setRandomNoteAndSound();
+            scheduleTimeout(() => {
+              lastMidiNote.value = null;
+              lastMidiName.value = '';
+              lastMidiRu.value = '';
+            }, 200);
+          }, 500);
       });
     } else {
       // Обработка режима выживания - используем requestIdleCallback
@@ -644,13 +701,10 @@ function handleVirtualPianoPress(midi: number) {
 }
 
 onMounted(async () => {
-  // Загружаем библиотеки параллельно (не блокирует начальный рендер благодаря ClientOnly)
-  const [vexflowModule, toneModule] = await Promise.all([
-    import('vexflow'),
-    import('tone')
-  ]);
+  // Загружаем только VexFlow - Tone.js будет загружен при первом взаимодействии пользователя
+  // Это предотвращает автоматическое создание AudioContext при импорте
+  const vexflowModule = await import('vexflow');
   VexFlow = vexflowModule;
-  Tone = toneModule;
   
   // Критичные операции выполняем сразу
   initializeMode();
@@ -664,14 +718,29 @@ onMounted(async () => {
   if (!props.noTimer) startInterval();
   window.addEventListener('keydown', onKeydown);
   
-  // Инициализацию синтезатора откладываем через requestIdleCallback (не-критичная операция)
-  if (typeof requestIdleCallback !== 'undefined') {
-    requestIdleCallback(async () => {
-      await createSynth();
-    }, { timeout: 500 });
-  } else {
-    // Fallback - создаем сразу, но асинхронно
-    createSynth();
+  // НЕ инициализируем синтезатор автоматически - ждем взаимодействия пользователя
+  // Аудио будет инициализировано при первом взаимодействии (клик, нажатие клавиши и т.д.)
+  
+  // Добавляем обработчики для инициализации аудио при первом взаимодействии
+  if (!audioInitHandlersAttached) {
+    const initAudio = () => {
+      if (!audioInitialized.value) {
+        initializeAudioOnUserInteraction();
+      }
+    };
+    
+    // Инициализируем при клике на canvas (нота) - используем nextTick для доступа к ref
+    nextTick(() => {
+      if (canvasRef.value) {
+        canvasRef.value.addEventListener('click', initAudio, { once: true });
+      }
+    });
+    
+    // Инициализируем при любом клике на странице
+    window.addEventListener('click', initAudio, { once: true });
+    window.addEventListener('touchstart', initAudio, { once: true });
+    
+    audioInitHandlersAttached = true;
   }
   
   // Подключаем MIDI, если это режим MIDI - используем requestIdleCallback для не-критичной операции
@@ -785,7 +854,7 @@ defineExpose({
         class="notation-canvas"
         @mouseenter="showTooltip = true"
         @mouseleave="showTooltip = false"
-        @click="playMidiNoteSound(expectedMidi)"
+        @click="() => { if (!audioInitialized) initializeAudioOnUserInteraction(); else playMidiNoteSound(expectedMidi); }"
       ></div>
       <div v-if="tooltipVisible" class="tooltip" @mouseenter="tooltipHovered = true" @mouseleave="tooltipHovered = false">
         <div style="font-size: 1.2em; font-weight: bold;">
@@ -939,7 +1008,17 @@ defineExpose({
   z-index: 2;
 }
 .midi-status { text-align: center; color: #888; font-size: 1.1rem; margin-bottom: 0.5rem; }
-.midi-last { text-align: center; color: #333; font-size: 1.3rem; margin-top: 1.2rem; }
+.midi-last {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  color: #333;
+  font-size: 1.3rem;
+  width: calc(100% - 2rem);
+  pointer-events: none;
+}
 
 .virtual-piano-container {
   width: 100%;

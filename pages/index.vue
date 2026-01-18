@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, provide } from 'vue';
+import { ref, onMounted, provide, toRaw } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
 import SettingsPage from '~/src/pages/settings/ui/SettingsPage.vue';
 import { useMIDICalibration } from '@/shared/lib';
@@ -59,7 +59,7 @@ onMounted(() => {
 function start() {
   navigateTo({
     path: '/training',
-    state: { settings: settings.value }
+    state: { settings: toRaw(settings.value) }
   });
 }
 
