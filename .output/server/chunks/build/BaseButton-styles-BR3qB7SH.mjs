@@ -1,7 +1,0 @@
-const a = ".base-button[data-v-cc1e0245]{background:#ffffff14;border:1px solid hsla(0,0%,100%,.2);border-radius:12px;color:#fff;cursor:pointer;font-family:inherit;font-size:1rem;font-weight:500;padding:.8rem 1.5rem;transition:all .3s}.base-button[data-v-cc1e0245]:hover:not(.disabled){background:#ffffff1f;transform:translateY(-2px)}.base-button[data-v-cc1e0245]:active:not(.disabled){transform:translateY(0)}.base-button.primary[data-v-cc1e0245]{background:linear-gradient(135deg,#42b883,#35a372);border-color:#42b883}.base-button.primary[data-v-cc1e0245]:hover:not(.disabled){background:linear-gradient(135deg,#4cd396,#3bb880);box-shadow:0 6px 20px #42b88366}.base-button.danger[data-v-cc1e0245]{background:#ff413633;border-color:#ff413666;color:#ff4136}.base-button.danger[data-v-cc1e0245]:hover:not(.disabled){background:#ff41364d;border-color:#ff413699}.base-button.ghost[data-v-cc1e0245]{background:transparent;border-color:transparent}.base-button.ghost[data-v-cc1e0245]:hover:not(.disabled){background:#ffffff0d;border-color:#ffffff1a}.base-button.disabled[data-v-cc1e0245]{cursor:not-allowed;opacity:.5}@media(max-width:768px){.base-button[data-v-cc1e0245]{font-size:.9rem;padding:.6rem 1rem}}@media(max-width:480px){.base-button[data-v-cc1e0245]{font-size:.85rem;padding:.5rem .75rem;white-space:nowrap}}";
-
-const BaseButtonStylesBR3qB7SH = [
-  a
-];
-
-export { BaseButtonStylesBR3qB7SH as default };
