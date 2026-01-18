@@ -37,8 +37,9 @@ export default defineNuxtConfig({
   
   // Nitro конфигурация для правильных путей
   nitro: {
-    // Используем preset static для статической генерации
-    preset: 'static',
+    // Используем preset static только для деплоя на GitHub Pages
+    // В других окружениях используем node-server для полноценного SSR
+    preset: (process.env.CI || process.env.GITHUB_ACTIONS) ? 'static' : 'node-server',
     alias: {
       '@/': './src/'
     },
