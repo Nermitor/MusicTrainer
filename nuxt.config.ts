@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -36,9 +37,20 @@ export default defineNuxtConfig({
   
   // Nitro конфигурация для правильных путей
   nitro: {
+    // Используем preset static для статической генерации
+    preset: 'static',
     alias: {
       '@/': './src/'
     },
+    // Настройка publicAssets для автоматического копирования клиентских файлов
+    // Файлы из .nuxt/dist/client будут доступны по /_nuxt/ в .output/public
+    publicAssets: [
+      {
+        baseURL: '/_nuxt/',
+        dir: resolve('.nuxt/dist/client'),
+        maxAge: 60 * 60 * 24 * 365 // 1 год кеширования
+      }
+    ],
     // Оптимизация для production
     compressPublicAssets: process.env.NODE_ENV === 'production',
     sourceMap: process.env.NODE_ENV !== 'production',
