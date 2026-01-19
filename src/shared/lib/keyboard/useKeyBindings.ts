@@ -1,71 +1,63 @@
-import { ref } from 'vue';
+import { computed } from 'vue';
+import { useStorage } from '@vueuse/core';
 
 const STORAGE_KEY = 'customKeyBindings';
-const keyboardMapping = ref<Record<string, number>>({});
-const rawBindings = ref<Record<number, string>>({});
-let initialized = false;
 
-function buildKeyboardMapping(bindings: Record<number, string>): Record<string, number> {
-  const result: Record<string, number> = {};
-  for (const [midi, key] of Object.entries(bindings)) {
-    if (typeof key === 'string') {
-      result[key.toLowerCase()] = Number(midi);
-    }
-  }
-  return result;
-}
+// Синглтон для хранения состояния (общий для всех вызовов useKeyBindings)
+let rawBindings: ReturnType<typeof useStorage<Record<number, string>>> | null = null;
+let keyboardMapping: ReturnType<typeof computed<Record<string, number>>> | null = null;
 
 function refreshFromStorage() {
-  if (typeof window === 'undefined') return; // SSR check
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    rawBindings.value = {};
-    keyboardMapping.value = {};
-    return;
-  }
-  try {
-    const bindings = JSON.parse(saved) as Record<number, string>;
-    rawBindings.value = bindings || {};
-    keyboardMapping.value = buildKeyboardMapping(rawBindings.value);
-  } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('Failed to load custom key bindings:', e);
-    }
-    rawBindings.value = {};
-    keyboardMapping.value = {};
-  }
-}
-
-function ensureInitialized() {
-  if (!initialized && typeof window !== 'undefined') {
-    // Инициализируем синхронно, но только если на клиенте
-    // Это безопасно, так как localStorage доступен только на клиенте
-    refreshFromStorage();
-    initialized = true;
-  } else if (!initialized) {
-    // SSR - помечаем как инициализированный, но не читаем localStorage
-    initialized = true;
-  }
+  // useStorage автоматически синхронизируется с localStorage, ничего не нужно делать
 }
 
 export function useKeyBindings() {
-  ensureInitialized();
+  // Инициализируем useStorage только один раз при первом вызове
+  // Это безопасно для SSR, так как выполняется внутри composable функции
+  if (!rawBindings) {
+    rawBindings = useStorage<Record<number, string>>(STORAGE_KEY, {}, undefined, {
+      serializer: {
+        read: (v: string) => {
+          if (!v) return {};
+          try {
+            return JSON.parse(v) as Record<number, string>;
+          } catch {
+            return {};
+          }
+        },
+        write: (v: Record<number, string>) => JSON.stringify(v),
+      },
+    });
 
+    // Вычисляемое значение для маппинга клавиш (key -> midi)
+    keyboardMapping = computed<Record<string, number>>(() => {
+      if (!rawBindings) return {};
+      const result: Record<string, number> = {};
+      for (const [midi, key] of Object.entries(rawBindings.value)) {
+        if (typeof key === 'string') {
+          result[key.toLowerCase()] = Number(midi);
+        }
+      }
+      return result;
+    });
+  }
+  
+  // Гарантируем, что rawBindings и keyboardMapping инициализированы
+  // Это защита от редких случаев, когда они могут быть null
+  if (!rawBindings || !keyboardMapping) {
+    throw new Error('useKeyBindings: Failed to initialize key bindings storage');
+  }
+  
   /**
    * Сохраняет пользовательские привязки клавиш в localStorage
    * @param bindings - объект, где ключ - MIDI номер, значение - клавиша
    */
   function saveKeyBindings(bindings: Record<number, string>) {
-    if (typeof window === 'undefined') return; // SSR check
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
-      rawBindings.value = { ...bindings };
-      keyboardMapping.value = buildKeyboardMapping(rawBindings.value);
-    } catch (e) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Failed to save custom key bindings:', e);
-      }
+    if (!rawBindings) {
+      throw new Error('useKeyBindings: rawBindings not initialized');
     }
+    rawBindings.value = { ...bindings };
+    // useStorage автоматически сохраняет в localStorage
   }
 
   /**
@@ -73,7 +65,9 @@ export function useKeyBindings() {
    * @returns Record<number, string> - объект, где ключ - MIDI номер, значение - клавиша
    */
   function loadRawBindings(): Record<number, string> {
-    refreshFromStorage();
+    if (!rawBindings) {
+      throw new Error('useKeyBindings: rawBindings not initialized');
+    }
     return { ...rawBindings.value };
   }
 
@@ -81,16 +75,20 @@ export function useKeyBindings() {
    * Очищает все пользовательские привязки
    */
   function clearKeyBindings() {
-    if (typeof window === 'undefined') return; // SSR check
-    localStorage.removeItem(STORAGE_KEY);
+    if (!rawBindings) {
+      throw new Error('useKeyBindings: rawBindings not initialized');
+    }
     rawBindings.value = {};
-    keyboardMapping.value = {};
+    // useStorage автоматически обновит localStorage
   }
 
   /**
    * Проверяет, есть ли сохраненные привязки
    */
   function hasBindings(): boolean {
+    if (!rawBindings) {
+      return false;
+    }
     return Object.keys(rawBindings.value).length > 0;
   }
 
@@ -98,12 +96,17 @@ export function useKeyBindings() {
    * Получает количество настроенных привязок
    */
   function getBindingsCount(): number {
+    if (!rawBindings) {
+      return 0;
+    }
     return Object.keys(rawBindings.value).length;
   }
 
   return {
-    keyboardMapping,
-    rawBindings,
+    // Гарантируем, что keyboardMapping не null (инициализируется выше)
+    keyboardMapping: keyboardMapping!,
+    // Гарантируем, что rawBindings не null (инициализируется выше)
+    rawBindings: rawBindings!,
     refresh: refreshFromStorage,
     saveKeyBindings,
     loadRawBindings,

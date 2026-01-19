@@ -46,7 +46,7 @@
       </div>
 
       <!-- Ряд 3: Подсказки (средняя карточка) -->
-      <div class="settings-card medium-card">
+      <div class="settings-card small-card">
         <h2>💡 Подсказки</h2>
         <BaseCheckbox v-model="alwaysShowHint">Всегда показывать</BaseCheckbox>
         <BaseSlider

@@ -6,6 +6,7 @@
          <div
            v-for="key in whiteKeys"
            :key="key.midi"
+           v-memo="[key.midi, pressedKey, pressedMidiNote, highlightCorrect, highlightIncorrect, correctNote, showKeyboardMapping, key.keyboardKey]"
            class="piano-key white"
            :class="{ active: pressedKey === key.midi || pressedMidiNote === key.midi, correct: highlightCorrect && key.midi === correctNote, incorrect: highlightIncorrect && key.midi === pressedMidiNote }"
            @mousedown="handleKeyPress(key.midi)"
@@ -23,6 +24,7 @@
          <div
            v-for="(key, index) in blackKeys"
            :key="key.midi"
+           v-memo="[key.midi, index, pressedKey, pressedMidiNote, highlightCorrect, highlightIncorrect, correctNote, showKeyboardMapping, key.keyboardKey]"
            class="piano-key black"
            :class="{ active: pressedKey === key.midi || pressedMidiNote === key.midi, correct: highlightCorrect && key.midi === correctNote, incorrect: highlightIncorrect && key.midi === pressedMidiNote }"
            :style="{ left: getBlackKeyPosition(index) }"

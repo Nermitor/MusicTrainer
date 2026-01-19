@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { ref, onMounted, provide, toRaw } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
-import SettingsPage from '~/src/pages/settings/ui/SettingsPage.vue';
+import { SettingsPage } from '@/pages/settings';
 import { useMIDICalibration } from '@/shared/lib';
 import { useProfile } from '@/entities/profile';
 import { useStatistics } from '@/entities/statistics';
@@ -19,13 +19,19 @@ import { useStatistics } from '@/entities/statistics';
 // Оптимизация LCP - настройка мета-тегов и resource hints
 useHead({
   title: 'Музыкальный тренажёр - Настройки',
-  meta: [
-    { name: 'description', content: 'Настройте параметры музыкального тренажера для изучения нот' }
-  ],
   link: [
     // Preconnect для внешних ресурсов (если есть)
     // { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
   ]
+});
+
+// Оптимизация: используем useSeoMeta для SEO мета-тегов
+useSeoMeta({
+  title: 'Музыкальный тренажёр - Настройки',
+  description: 'Настройте параметры музыкального тренажера для изучения нот',
+  ogTitle: 'Музыкальный тренажёр - Настройки',
+  ogDescription: 'Настройте параметры музыкального тренажера для изучения нот',
+  ogType: 'website',
 });
 
 const settings = ref<TrainingSettings>({

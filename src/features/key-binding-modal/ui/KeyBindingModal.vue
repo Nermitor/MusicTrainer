@@ -69,9 +69,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { BaseModal } from '@/shared/ui';
 import { useKeyBindings } from '@/shared/lib';
+import { useEventListener } from '@vueuse/core';
 
 interface Props {
   modelValue: boolean;
@@ -122,31 +123,13 @@ const selectedMidi = ref<number | null>(null);
 const { rawBindings, saveKeyBindings, clearKeyBindings, refresh } = useKeyBindings();
 const customKeyBindings = rawBindings;
 
-let isListening = false;
-function startListening() {
-  if (isListening) return;
-  window.addEventListener('keydown', handleKeyPress);
-  isListening = true;
-}
-function stopListening() {
-  if (!isListening) return;
-  window.removeEventListener('keydown', handleKeyPress);
-  isListening = false;
-}
-
 watch(isOpen, (open) => {
   if (open) {
     refresh();
-    startListening();
   } else {
-    stopListening();
     selectedMidi.value = null;
   }
 }, { immediate: true });
-
-onUnmounted(() => {
-  stopListening();
-});
 
 function selectNote(midi: number) {
   selectedMidi.value = midi;
@@ -217,6 +200,15 @@ function getBlackKeyPosition(index: number): string {
   const whiteKeyWidth = 100 / 14;
   const position = (octaveIndex * 7 + octavePattern[positionInOctave]) * whiteKeyWidth;
   return `${position}%`;
+}
+
+// Используем useEventListener на верхнем уровне с SSR-проверкой
+// Слушатель активен только когда модал открыт
+if (typeof window !== 'undefined') {
+  useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+    if (!isOpen.value) return;
+    handleKeyPress(event);
+  });
 }
 </script>
 

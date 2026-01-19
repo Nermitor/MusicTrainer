@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed, nextTick, markRaw, defineAsyncComponent } from 'vue';
 // Динамические импорты для оптимизации загрузки - загружаем только при необходимости
 let VexFlow: typeof import('vexflow') | null = null;
 let Tone: typeof import('tone') | null = null;
-import { VirtualPiano } from '@/widgets/virtual-piano';
+import type { Synth, PluckSynth, MembraneSynth, FMSynth } from 'tone';
+// Оптимизация: используем defineAsyncComponent для тяжелых виджетов
+const VirtualPiano = defineAsyncComponent(() => import('@/widgets/virtual-piano/ui/VirtualPiano.vue'));
 import { useKeyBindings } from '@/shared/lib';
+import { isClient, safeSetTimeout, safeSetInterval, safeClearTimeout, safeClearInterval, safeWindow } from '@/shared/lib/ssr-utils';
+import { useEventListener } from '@vueuse/core';
+
+// Union type для всех синтезаторов Tone.js
+type ToneSynth = Synth | PluckSynth | MembraneSynth | FMSynth;
 
 const props = defineProps<{
   speed: number;
@@ -61,15 +68,30 @@ const diatonicIndexByLetter: Record<string, number> = {
 };
 const staffBaseIndex = diatonicIndexByLetter.E + 4 * 7; // E4 — линия нотоносца
 
+// Кеш для мемоизации результатов getStaffPositionType
+const staffPositionCache = new Map<string, 'line' | 'between' | null>();
+
 function getStaffPositionType(noteName: string): 'line' | 'between' | null {
+  // Проверяем кеш
+  if (staffPositionCache.has(noteName)) {
+    return staffPositionCache.get(noteName)!;
+  }
+  
   const primaryName = noteName.split('/')[0];
   const match = primaryName.match(/^([A-G])([#b]?)(\d)$/);
-  if (!match) return null;
+  if (!match) {
+    staffPositionCache.set(noteName, null);
+    return null;
+  }
   const letter = match[1];
   const octave = Number(match[3]);
   const diatonic = diatonicIndexByLetter[letter] + octave * 7;
   const diff = diatonic - staffBaseIndex;
-  return diff % 2 === 0 ? 'line' : 'between';
+  const result = diff % 2 === 0 ? 'line' : 'between';
+  
+  // Сохраняем в кеш
+  staffPositionCache.set(noteName, result);
+  return result;
 }
 
 const filteredNaturalNotes = computed(() => {
@@ -93,7 +115,10 @@ const filteredAccidentals = computed(() => {
 });
 
 const filteredNotesByLocation = computed(() => {
-  const currentNotes = props.withAccidentals ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] : filteredNaturalNotes.value;
+  const currentNotes = props.withAccidentals 
+    ? [...filteredNaturalNotes.value, ...filteredAccidentals.value] 
+    : filteredNaturalNotes.value;
+  
   if (props.locationRange === 'on') {
     return currentNotes.filter(note => getStaffPositionType(note.name) === 'line');
   } else if (props.locationRange === 'between') {
@@ -103,6 +128,7 @@ const filteredNotesByLocation = computed(() => {
   }
 });
 
+// Оптимизация: используем напрямую filteredNotesByLocation вместо промежуточного computed
 const allNotes = computed(() => filteredNotesByLocation.value);
 
 const note = ref<typeof allNotes.value[0]>(allNotes.value[0]);
@@ -117,6 +143,22 @@ const countdown = ref(props.speed);
 let countdownInterval: number | null = null;
 let hintTimeout: number | null = null;
 const pendingTimeouts = new Set<number>();
+
+// Кеш для вычислений размеров canvas (оптимизация производительности)
+let canvasSizeCache: {
+  viewportWidth: number;
+  actualCanvasWidth: number;
+  blockWidth: number;
+  blockHeight: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  scaleFactor: number;
+  finalScaleFactor: number;
+  scaledStaveX: number;
+  scaledStaveWidth: number;
+  scaledStaveY: number;
+  isMobile: boolean;
+} | null = null;
 
 const midiSupported = ref(false);
 const midiStatus = ref('');
@@ -158,12 +200,21 @@ const noteNamesRu: Record<string, string> = {
   'E': 'Ми', 'F': 'Фа', 'F#': 'Фа♯', 'Gb': 'Соль♭', 'G': 'Соль', 'G#': 'Соль♯',
   'Ab': 'Ля♭', 'A': 'Ля', 'A#': 'Ля♯', 'Bb': 'Си♭', 'B': 'Си',
 };
-function getRuName(noteName: string) {
+/**
+ * Получить русское название ноты из английского названия
+ * @param noteName - английское название ноты (например, "C", "C#", "Db")
+ * @returns русское название ноты или пустая строка, если не найдено
+ */
+function getRuName(noteName: string): string {
   const match = noteName.match(/^([A-G](#|b)?)/);
   return match ? noteNamesRu[match[1]] || '' : '';
 }
 
-function setRandomNoteAndSound() {
+/**
+ * Установить случайную ноту и воспроизвести её звук
+ * Обновляет состояние компонента для новой ноты
+ */
+function setRandomNoteAndSound(): void {
   const notes = allNotes.value;
   note.value = notes[Math.floor(Math.random() * notes.length)];
   // Воспроизводим звук только после инициализации аудио (требуется взаимодействие пользователя)
@@ -175,7 +226,12 @@ function setRandomNoteAndSound() {
   noteStartTime.value = Date.now();
 }
 
-async function drawNote() {
+/**
+ * Отрисовать ноту на нотном стане с использованием VexFlow
+ * Загружает VexFlow динамически при первом вызове
+ * @throws {Error} Если не удалось загрузить VexFlow или отрисовать ноту
+ */
+async function drawNote(): Promise<void> {
   if (!canvasRef.value) return;
   // Загружаем VexFlow динамически, если еще не загружен
   if (!VexFlow) {
@@ -197,75 +253,99 @@ async function drawNote() {
   const canvasElement = canvasRef.value;
   const isMobile = viewportWidth < 768;
   
-  // Оптимизация: используем requestAnimationFrame для чтения layout свойств
-  // Это предотвращает forced reflow (layout thrashing) - читаем все layout свойства в одном frame
-  const { actualCanvasWidth, blockWidth, blockHeight } = await new Promise<{
-    actualCanvasWidth: number;
-    blockWidth: number;
-    blockHeight: number;
-  }>((resolve) => {
-    requestAnimationFrame(() => {
-      const canvasRect = canvasElement.getBoundingClientRect();
-      const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
-      
-      // Получаем размеры белого пространства (notation block)
-      const notationBlock = canvasElement.parentElement;
-      const blockWidth = notationBlock?.offsetWidth || actualCanvasWidth;
-      const blockHeight = notationBlock?.offsetHeight || actualCanvasWidth * 0.44;
-      
-      resolve({ actualCanvasWidth, blockWidth, blockHeight });
+  // Оптимизация: кешируем вычисления размеров, если viewport не изменился
+  let canvasWidth: number;
+  let canvasHeight: number;
+  let scaleFactor: number;
+  let finalScaleFactor: number;
+  let scaledStaveX: number;
+  let scaledStaveWidth: number;
+  let scaledStaveY: number;
+  
+  if (canvasSizeCache && canvasSizeCache.viewportWidth === viewportWidth && canvasSizeCache.isMobile === isMobile) {
+    // Используем кешированные значения
+    ({ canvasWidth, canvasHeight, scaleFactor, finalScaleFactor, scaledStaveX, scaledStaveWidth, scaledStaveY } = canvasSizeCache);
+  } else {
+    // Оптимизация: используем requestAnimationFrame для чтения layout свойств
+    // Это предотвращает forced reflow (layout thrashing) - читаем все layout свойства в одном frame
+    const { actualCanvasWidth, blockWidth, blockHeight } = await new Promise<{
+      actualCanvasWidth: number;
+      blockWidth: number;
+      blockHeight: number;
+    }>((resolve) => {
+      requestAnimationFrame(() => {
+        const canvasRect = canvasElement.getBoundingClientRect();
+        const actualCanvasWidth = canvasRect.width > 0 ? canvasRect.width : (viewportWidth - 64);
+        
+        // Получаем размеры белого пространства (notation block)
+        const notationBlock = canvasElement.parentElement;
+        const blockWidth = notationBlock?.offsetWidth || actualCanvasWidth;
+        const blockHeight = notationBlock?.offsetHeight || actualCanvasWidth * 0.44;
+        
+        resolve({ actualCanvasWidth, blockWidth, blockHeight });
+      });
     });
-  });
-  
-  // Нотный стан должен занимать 80% белого пространства
-  const targetStaveWidth = blockWidth * 0.8;
-  const targetStaveHeight = blockHeight * 0.8;
-  
-  // Базовый размер для масштабирования (500px - стандартный размер)
-  const baseWidth = 500;
-  const baseHeight = 220;
-  
-  // Позиционирование stave пропорционально размеру canvas
-  // Скрипичный ключ требует места слева (примерно 8-10% ширины)
-  const staveXPercent = isMobile ? 0.08 : 0.06;
-  
-  // Вычисляем scaleFactor так, чтобы стан занимал 80% ширины блока
-  // scaledStaveWidth * finalScaleFactor = targetStaveWidth
-  // (baseStaveWidth * 0.5) * (scaleFactor * 2) = targetStaveWidth
-  // baseStaveWidth * scaleFactor = targetStaveWidth
-  const baseStaveWidth = baseWidth * (1 - staveXPercent * 2);
-  const scaleFactor = targetStaveWidth / baseStaveWidth;
-  
-  const minWidth = isMobile ? 240 : 280;
-  const canvasWidth = Math.max(minWidth, Math.floor(actualCanvasWidth));
-  // Высоту вычисляем на основе целевой высоты стана (80% блока)
-  // После масштабирования высота стана будет targetStaveHeight
-  const baseCanvasHeight = Math.max(150, Math.round(targetStaveHeight / (scaleFactor * 2))); // Делим на finalScaleFactor
-  const canvasHeight = baseCanvasHeight * 2; // Увеличиваем высоту в 2 раза для масштабированных символов
+    
+    // Нотный стан должен занимать 80% белого пространства
+    const targetStaveWidth = blockWidth * 0.8;
+    const targetStaveHeight = blockHeight * 0.8;
+    
+    // Базовый размер для масштабирования (500px - стандартный размер)
+    const baseWidth = 500;
+    const baseHeight = 220;
+    
+    // Позиционирование stave пропорционально размеру canvas
+    // Скрипичный ключ требует места слева (примерно 8-10% ширины)
+    const staveXPercent = isMobile ? 0.08 : 0.06;
+    
+    // Вычисляем scaleFactor так, чтобы стан занимал 80% ширины блока
+    // scaledStaveWidth * finalScaleFactor = targetStaveWidth
+    // (baseStaveWidth * 0.5) * (scaleFactor * 2) = targetStaveWidth
+    // baseStaveWidth * scaleFactor = targetStaveWidth
+    const baseStaveWidth = baseWidth * (1 - staveXPercent * 2);
+    scaleFactor = targetStaveWidth / baseStaveWidth;
+    
+    const minWidth = isMobile ? 240 : 280;
+    canvasWidth = Math.max(minWidth, Math.floor(actualCanvasWidth));
+    // Высоту вычисляем на основе целевой высоты стана (80% блока)
+    // После масштабирования высота стана будет targetStaveHeight
+    const baseCanvasHeight = Math.max(150, Math.round(targetStaveHeight / (scaleFactor * 2))); // Делим на finalScaleFactor
+    canvasHeight = baseCanvasHeight * 2; // Увеличиваем высоту в 2 раза для масштабированных символов
+    
+    finalScaleFactor = scaleFactor * 2;
+    scaledStaveX = baseWidth * staveXPercent;
+    scaledStaveWidth = baseStaveWidth * 0.5;
+    const targetScaledStaveY = baseHeight * 0.45;
+    scaledStaveY = targetScaledStaveY / finalScaleFactor;
+    
+    // Сохраняем в кеш
+    canvasSizeCache = {
+      viewportWidth,
+      actualCanvasWidth,
+      blockWidth,
+      blockHeight,
+      canvasWidth,
+      canvasHeight,
+      scaleFactor,
+      finalScaleFactor,
+      scaledStaveX,
+      scaledStaveWidth,
+      scaledStaveY,
+      isMobile,
+    };
+  }
   
   // Используем canvasWidth/canvasHeight для renderer, но масштабируем контекст
-  const renderer = new Renderer(canvasElement, Renderer.Backends.SVG);
+  // Оптимизация: используем markRaw для предотвращения ненужной реактивности
+  const renderer = markRaw(new Renderer(canvasElement, Renderer.Backends.SVG));
   renderer.resize(canvasWidth, canvasHeight);
   const context = renderer.getContext();
   context.setFont('Arial', 16, '').setBackgroundFillStyle('#fff');
   
   // Применяем масштабирование контекста для пропорционального изменения всех элементов
   // Ширина стана уменьшена в 2 раза, а масштаб увеличен в 2 раза для всех устройств
-  const finalScaleFactor = scaleFactor * 2;
+  // Используем кешированные значения
   context.scale(finalScaleFactor, finalScaleFactor);
-  
-  // Вычисляем позиции в базовой системе координат (после масштабирования контекста)
-  // Координаты должны быть в исходной системе, так как контекст уже масштабирован
-  const scaledStaveX = baseWidth * staveXPercent;
-  // Ширина нотного стана уменьшена в 2 раза (baseStaveWidth уже вычислена выше)
-  const scaledStaveWidth = baseStaveWidth * 0.5;
-  // При увеличении масштаба в 2 раза нужно скорректировать позицию Y
-  // Y-координата в базовой системе координат (до масштабирования контекста)
-  // После context.scale(2x, 2x) эта координата умножится на 2, поэтому делим на finalScaleFactor
-  // Используем позицию относительно базовой высоты, так как canvas теперь в 2 раза выше
-  const targetScaledStaveY = baseHeight * 0.45; // Целевая позиция Y после масштабирования (45% от baseHeight)
-  const baseStaveY = targetScaledStaveY / finalScaleFactor;
-  const scaledStaveY = baseStaveY;
   
   const stave = new Stave(scaledStaveX, scaledStaveY, scaledStaveWidth);
   if (props.showClef) {
@@ -304,65 +384,92 @@ async function drawNote() {
 }
 
 // Создаем синтезатор в зависимости от выбранного инструмента
-let currentSynth: any = null;
+let currentSynth: ToneSynth | null = null;
 
-async function createSynth() {
-  // Загружаем Tone.js динамически, если еще не загружен
-  if (!Tone) {
-    Tone = await import('tone');
-  }
-  const { Synth, PluckSynth, MembraneSynth, FMSynth } = Tone;
-  
-  // Dispose старого синтезатора, если он есть
-  if (currentSynth) {
-    try {
-      // Отключаем от destination перед dispose
-      if (currentSynth.disconnect) {
-        currentSynth.disconnect();
-      }
-      // Вызываем dispose для освобождения ресурсов
-      if (currentSynth.dispose) {
-        currentSynth.dispose();
-      }
-    } catch (error) {
-      // Игнорируем ошибки dispose в production (проверяем через window для SSR-безопасности)
-      const isDev = typeof window !== 'undefined' && (window as any).__DEV__ !== false;
-      if (isDev) {
-        console.error('Error disposing old synth:', error);
-      }
-    } finally {
-      currentSynth = null;
+/**
+ * Создает синтезатор в зависимости от выбранного инструмента
+ * @throws {Error} Если не удалось загрузить Tone.js или создать синтезатор
+ */
+async function createSynth(): Promise<void> {
+  try {
+    // Загружаем Tone.js динамически, если еще не загружен
+    if (!Tone) {
+      Tone = await import('tone');
     }
-  }
-  
-  switch (props.instrumentType) {
-    case 'piano':
-      currentSynth = new Synth({
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 }
-      }).toDestination();
-      break;
-    case 'synth':
-      currentSynth = new Synth({
-        oscillator: { type: 'square' },
-        envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8 }
-      }).toDestination();
-      break;
-    case 'guitar':
-      currentSynth = new PluckSynth().toDestination();
-      break;
-    case 'bass':
-      currentSynth = new MembraneSynth().toDestination();
-      break;
-    case 'organ':
-      currentSynth = new FMSynth().toDestination();
-      break;
-    default:
-      currentSynth = new Synth().toDestination();
+    const { Synth, PluckSynth, MembraneSynth, FMSynth } = Tone;
+    
+    // Dispose старого синтезатора, если он есть
+    if (currentSynth) {
+      try {
+        // Отключаем от destination перед dispose
+        if (currentSynth.disconnect) {
+          currentSynth.disconnect();
+        }
+        // Вызываем dispose для освобождения ресурсов
+        if (currentSynth.dispose) {
+          currentSynth.dispose();
+        }
+      } catch (error) {
+        // Игнорируем ошибки dispose в production, но логируем в development
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Error disposing old synth:', error);
+        }
+      } finally {
+        currentSynth = null;
+      }
+    }
+    
+    // Создаем новый синтезатор в зависимости от типа инструмента
+    try {
+      let synth: ToneSynth;
+      switch (props.instrumentType) {
+        case 'piano':
+          synth = new Synth({
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 }
+          }).toDestination();
+          break;
+        case 'synth':
+          synth = new Synth({
+            oscillator: { type: 'square' },
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8 }
+          }).toDestination();
+          break;
+        case 'guitar':
+          synth = new PluckSynth().toDestination();
+          break;
+        case 'bass':
+          synth = new MembraneSynth().toDestination();
+          break;
+        case 'organ':
+          synth = new FMSynth().toDestination();
+          break;
+        default:
+          synth = new Synth().toDestination();
+      }
+      // Оптимизация: используем markRaw для предотвращения ненужной реактивности
+      currentSynth = markRaw(synth);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to create ${props.instrumentType} synth: ${errorMessage}`);
+    }
+  } catch (error) {
+    // Обрабатываем ошибки загрузки Tone.js
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error loading Tone.js or creating synth:', error);
+    }
+    throw new Error(`Failed to initialize audio synthesizer: ${errorMessage}`);
   }
 }
 
-async function playMidiNoteSound(midi: number) {
+/**
+ * Воспроизвести звук ноты по MIDI номеру
+ * Использует текущий синтезатор для воспроизведения звука
+ * @param midi - MIDI номер ноты (0-127)
+ * @throws {Error} Если не удалось инициализировать или воспроизвести звук
+ */
+async function playMidiNoteSound(midi: number): Promise<void> {
   // Защита от одновременных вызовов - предотвращает ошибку "Start time must be strictly greater"
   if (isPlayingSound) {
     return;
@@ -389,7 +496,7 @@ async function playMidiNoteSound(midi: number) {
     }
     
     // Сбрасываем флаг после небольшой задержки, чтобы предотвратить слишком частые вызовы
-    setTimeout(() => {
+    safeSetTimeout(() => {
       isPlayingSound = false;
     }, 100);
   } catch (error) {
@@ -401,62 +508,72 @@ async function playMidiNoteSound(midi: number) {
 function startCountdown() {
   if (props.noTimer) return;
   countdown.value = props.speed;
-  if (countdownInterval) clearInterval(countdownInterval);
-  countdownInterval = setInterval(() => {
+  if (countdownInterval !== null) safeClearInterval(countdownInterval);
+  const intervalId = safeSetInterval(() => {
     if (!paused.value) {
       countdown.value = Math.max(0, +(countdown.value - 0.1).toFixed(1));
     }
   }, 100);
+  countdownInterval = intervalId;
 }
 function stopCountdown() {
-  if (countdownInterval) clearInterval(countdownInterval);
+  if (countdownInterval !== null) {
+    safeClearInterval(countdownInterval);
+    countdownInterval = null;
+  }
 }
 
 function startHintTimer() {
   if (props.alwaysShowHint || props.hintDelay === 0) return;
   autoShowTooltip.value = false;
-  if (hintTimeout) clearTimeout(hintTimeout);
-  hintTimeout = setTimeout(() => {
+  if (hintTimeout !== null) safeClearTimeout(hintTimeout);
+  const timeoutId = safeSetTimeout(() => {
     autoShowTooltip.value = true;
-  }, props.hintDelay * 1000) as unknown as number;
+  }, props.hintDelay * 1000);
+  hintTimeout = timeoutId;
 }
 
 function stopHintTimer() {
-  if (hintTimeout) {
-    clearTimeout(hintTimeout);
+  if (hintTimeout !== null) {
+    safeClearTimeout(hintTimeout);
     hintTimeout = null;
   }
   autoShowTooltip.value = false;
 }
 
 function scheduleTimeout(callback: () => void, delay: number) {
-  const id = window.setTimeout(() => {
-    pendingTimeouts.delete(id);
+  const id = safeSetTimeout(() => {
+    if (id !== null) {
+      pendingTimeouts.delete(id);
+    }
     callback();
   }, delay);
-  pendingTimeouts.add(id);
+  if (id !== null) {
+    pendingTimeouts.add(id);
+  }
 }
 
 function clearPendingTimeouts() {
-  pendingTimeouts.forEach((id) => clearTimeout(id));
+  pendingTimeouts.forEach((id) => safeClearTimeout(id));
   pendingTimeouts.clear();
 }
 
 function startModeTimer() {
   if (props.trainingMode === 'timed') {
     timeRemaining.value = 60;
-    modeTimer = setInterval(() => {
+    const intervalId = safeSetInterval(() => {
       timeRemaining.value--;
       if (timeRemaining.value <= 0) {
         stop();
       }
-    }, 1000) as unknown as number;
+    }, 1000);
+    modeTimer = intervalId;
   }
 }
 
 function stopModeTimer() {
-  if (modeTimer) {
-    clearInterval(modeTimer);
+  if (modeTimer !== null) {
+    safeClearInterval(modeTimer);
     modeTimer = null;
   }
 }
@@ -478,15 +595,16 @@ function startInterval() {
   stopCountdown();
   if (!props.noTimer) countdown.value = props.speed;
   startCountdown();
-  intervalId.value = setInterval(() => {
+  const interval = safeSetInterval(() => {
     if (!paused.value) {
       setRandomNoteAndSound();
     }
-  }, props.speed * 1000) as unknown as number;
+  }, props.speed * 1000);
+  intervalId.value = interval;
 }
 function clearIntervalIfNeeded() {
   if (intervalId.value !== null) {
-    clearInterval(intervalId.value);
+    safeClearInterval(intervalId.value);
     intervalId.value = null;
   }
   stopCountdown();
@@ -538,8 +656,13 @@ async function ensureToneStarted() {
   await toneStartPromise;
 }
 
-// Инициализация аудио при первом взаимодействии пользователя
-async function initializeAudioOnUserInteraction() {
+/**
+ * Инициализация аудио при первом взаимодействии пользователя
+ * Загружает Tone.js и создает синтезатор только после взаимодействия пользователя
+ * Это предотвращает автоматическое создание AudioContext при загрузке страницы
+ * @throws {Error} Если не удалось загрузить Tone.js или создать синтезатор
+ */
+async function initializeAudioOnUserInteraction(): Promise<void> {
   if (audioInitialized.value) return;
   
   // Импортируем Tone.js только при первом взаимодействии пользователя
@@ -559,15 +682,23 @@ async function initializeAudioOnUserInteraction() {
   // НЕ воспроизводим звук здесь - звук будет воспроизведен при взаимодействии пользователя
   // Это предотвращает двойной вызов playMidiNoteSound и ошибку "Start time must be strictly greater"
 }
+/**
+ * Конвертировать MIDI номер в русское название ноты
+ * @param midi - MIDI номер ноты (0-127)
+ * @returns русское название ноты или пустая строка
+ */
 function midiNumberToRu(midi: number): string {
   const name = midiNumberToName(midi);
   const match = name.match(/^([A-G]#?)/);
   return match ? noteNamesRu[match[1]] || '' : '';
 }
 
-// Универсальная функция обработки нажатия ноты (из любого источника ввода)
-// Оптимизирована для FID/INP - минимизация блокирующего кода
-async function handleNotePress(pressedMidi: number) {
+/**
+ * Универсальная функция обработки нажатия ноты из любого источника ввода
+ * Оптимизирована для FID/INP - минимизация блокирующего кода
+ * @param pressedMidi - MIDI номер нажатой ноты
+ */
+async function handleNotePress(pressedMidi: number): Promise<void> {
   // Инициализируем аудио при первом взаимодействии пользователя (ЖДЕМ завершения)
   if (!audioInitialized.value) {
     await initializeAudioOnUserInteraction();
@@ -601,7 +732,7 @@ async function handleNotePress(pressedMidi: number) {
     }, { timeout: 1000 });
   } else {
     // Fallback для браузеров без requestIdleCallback
-    setTimeout(() => {
+    safeSetTimeout(() => {
       emit('noteAttempt', {
         noteName: note.value.name,
         midi: note.value.midi,
@@ -671,7 +802,11 @@ async function handleNotePress(pressedMidi: number) {
   });
 }
 
-function handleMIDIMessage(event: MIDIMessageEvent) {
+/**
+ * Обработчик MIDI сообщений от физической MIDI клавиатуры
+ * @param event - MIDI событие с данными о нажатой ноте
+ */
+function handleMIDIMessage(event: MIDIMessageEvent): void {
   if (!event.data) return;
   const status = event.data[0];
   const noteNum = event.data[1];
@@ -683,21 +818,58 @@ function handleMIDIMessage(event: MIDIMessageEvent) {
   }
 }
 
-function onMIDISuccess(midiAccess: any) {
-  midiSupported.value = true;
-  midiStatus.value = 'MIDI-клавиатура подключена';
-  for (let input of midiAccess.inputs.values()) {
-    input.onmidimessage = handleMIDIMessage;
+/**
+ * Обработчик успешного подключения к MIDI устройству
+ * @param midiAccess - объект доступа к MIDI API
+ */
+function onMIDISuccess(midiAccess: MIDIAccess): void {
+  try {
+    midiSupported.value = true;
+    midiStatus.value = 'MIDI-клавиатура подключена';
+    
+    // Подключаем обработчики для всех доступных MIDI входов
+    const inputs = midiAccess.inputs.values();
+    let inputCount = 0;
+    for (const input of inputs) {
+      input.onmidimessage = handleMIDIMessage;
+      inputCount++;
+    }
+    
+    if (inputCount === 0) {
+      midiStatus.value = 'MIDI устройство найдено, но входы отсутствуют';
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error setting up MIDI inputs:', error);
+    }
+    midiSupported.value = false;
+    midiStatus.value = `Ошибка подключения MIDI: ${errorMessage}`;
   }
 }
-function onMIDIFailure() {
+
+/**
+ * Обработчик ошибки подключения к MIDI устройству
+ * @param error - объект ошибки (опционально)
+ */
+function onMIDIFailure(error?: unknown): void {
   midiSupported.value = false;
-  midiStatus.value = 'MIDI-клавиатура не найдена или не поддерживается';
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('MIDI access failed:', error);
+  }
+  midiStatus.value = `MIDI-клавиатура не найдена или не поддерживается${errorMessage !== 'Unknown error' ? `: ${errorMessage}` : ''}`;
 }
 
 // Обработчик для виртуального пианино
 function handleVirtualPianoPress(midi: number) {
   handleNotePress(midi);
+}
+
+// Используем useEventListener на верхнем уровне для автоматического удаления слушателей при размонтировании
+// Добавляем SSR-проверку для предотвращения ошибок при серверном рендеринге
+if (typeof window !== 'undefined') {
+  useEventListener(window, 'keydown', onKeydown);
 }
 
 onMounted(async () => {
@@ -716,7 +888,6 @@ onMounted(async () => {
   });
   
   if (!props.noTimer) startInterval();
-  window.addEventListener('keydown', onKeydown);
   
   // НЕ инициализируем синтезатор автоматически - ждем взаимодействия пользователя
   // Аудио будет инициализировано при первом взаимодействии (клик, нажатие клавиши и т.д.)
@@ -736,7 +907,7 @@ onMounted(async () => {
       }
     });
     
-    // Инициализируем при любом клике на странице
+    // Инициализируем при любом клике на странице (одноразовые события)
     window.addEventListener('click', initAudio, { once: true });
     window.addEventListener('touchstart', initAudio, { once: true });
     
@@ -752,7 +923,7 @@ onMounted(async () => {
       if (typeof requestIdleCallback !== 'undefined') {
         requestIdleCallback(connectMIDI, { timeout: 2000 });
       } else {
-        setTimeout(connectMIDI, 500);
+        safeSetTimeout(connectMIDI, 500);
       }
     } else {
       midiStatus.value = 'Web MIDI API не поддерживается';
@@ -767,10 +938,7 @@ onUnmounted(() => {
   stopHintTimer();
   clearPendingTimeouts();
   
-  // Удаляем слушатели событий
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('keydown', onKeydown);
-  }
+  // useEventListener автоматически удаляет слушатели при размонтировании
   
   // Правильно dispose синтезатора Tone.js
   if (currentSynth) {
@@ -785,9 +953,7 @@ onUnmounted(() => {
       }
     } catch (error) {
       // Игнорируем ошибки dispose в production
-      // Игнорируем ошибки dispose в production (проверяем через window для SSR-безопасности)
-      const isDev = typeof window !== 'undefined' && (window as any).__DEV__ !== false;
-      if (isDev) {
+      if (process.env.NODE_ENV !== 'production') {
         console.error('Error disposing synth:', error);
       }
     } finally {
@@ -797,21 +963,29 @@ onUnmounted(() => {
   
   // Очищаем promise для Tone.start()
   toneStartPromise = null;
+  
+  // Оптимизация памяти: очищаем кеш вычислений размеров canvas
+  canvasSizeCache = null;
+  
+  // Очищаем кеш для мемоизации getStaffPositionType
+  staffPositionCache.clear();
 });
 
-watch(() => props.speed, startInterval);
+// Оптимизация: используем flush: 'post' для watchers, которые не требуют синхронного обновления
+watch(() => props.speed, startInterval, { flush: 'post' });
 watch(() => props.withAccidentals, () => {
   setRandomNoteAndSound();
   startInterval();
-});
+}, { flush: 'post' });
 watch(() => props.octaveRange, () => {
   setRandomNoteAndSound();
   startInterval();
-});
+}, { flush: 'post' });
 watch(() => props.locationRange, () => {
   setRandomNoteAndSound();
   startInterval();
-});
+}, { flush: 'post' });
+// instrumentType требует синхронного обновления для немедленной смены звука
 watch(() => props.instrumentType, async () => {
   // Пересоздаем синтезатор при смене инструмента
   await createSynth();
@@ -822,7 +996,7 @@ watch(() => props.inputMode, (newMode) => {
   if (newMode === 'midi' && typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
     navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
   }
-});
+}, { flush: 'post' });
 watch(() => props.noTimer, (noTimer) => {
   if (noTimer) {
     clearIntervalIfNeeded();
@@ -830,7 +1004,8 @@ watch(() => props.noTimer, (noTimer) => {
     setRandomNoteAndSound();
     startInterval();
   }
-});
+}, { flush: 'post' });
+// note требует синхронного обновления для немедленной отрисовки
 watch(note, () => {
   nextTick(() => drawNote());
 });

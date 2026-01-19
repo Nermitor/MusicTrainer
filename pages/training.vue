@@ -42,21 +42,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, defineAsyncComponent } from 'vue';
 import { useRoute } from 'vue-router';
 import type { TrainingSettings, NoteAttempt } from '@/shared/types';
 import type { SessionTypes } from '@/entities/session';
-import NotationTrainer from '~/src/widgets/notation-trainer/ui/NotationTrainer.vue';
-import ResultsView from '~/src/widgets/results-view/ui/ResultsView.vue';
+import { NotationTrainer } from '@/widgets/notation-trainer';
 import { useStatistics } from '@/entities/statistics';
 import { useSession } from '@/entities/session';
+
+// Оптимизация: используем defineAsyncComponent для тяжелых виджетов
+const ResultsView = defineAsyncComponent(() => import('@/widgets/results-view').then(m => m.ResultsView));
 
 // Оптимизация LCP - настройка мета-тегов
 useHead({
   title: 'Музыкальный тренажёр - Тренировка',
-  meta: [
-    { name: 'description', content: 'Тренируйтесь читать ноты на музыкальном тренажере' }
-  ]
+});
+
+// Оптимизация: используем useSeoMeta для SEO мета-тегов
+useSeoMeta({
+  title: 'Музыкальный тренажёр - Тренировка',
+  description: 'Тренируйтесь читать ноты на музыкальном тренажере',
+  ogTitle: 'Музыкальный тренажёр - Тренировка',
+  ogDescription: 'Тренируйтесь читать ноты на музыкальном тренажере',
+  ogType: 'website',
 });
 
 const showResults = ref(false);

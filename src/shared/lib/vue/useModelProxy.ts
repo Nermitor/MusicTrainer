@@ -7,7 +7,7 @@ import { computed, type WritableComputedRef } from 'vue';
  * @param key - ключ свойства в modelValue
  * @returns WritableComputedRef для использования с v-model
  */
-export function useModelProxy<T extends Record<string, any>, K extends keyof T>(
+export function useModelProxy<T extends Record<string, unknown>, K extends keyof T>(
   props: { modelValue: T },
   emit: (event: 'update:modelValue', value: T) => void,
   key: K
@@ -25,12 +25,12 @@ export function useModelProxy<T extends Record<string, any>, K extends keyof T>(
  * @param keys - массив ключей свойств
  * @returns объект с WritableComputedRef для каждого ключа
  */
-export function useModelProxies<T extends Record<string, any>>(
+export function useModelProxies<T extends Record<string, unknown>>(
   props: { modelValue: T },
   emit: (event: 'update:modelValue', value: T) => void,
   keys: (keyof T)[]
-): Record<keyof T, WritableComputedRef<any>> {
-  const proxies: any = {};
+): { [K in keyof T]: WritableComputedRef<T[K]> } {
+  const proxies = {} as { [K in keyof T]: WritableComputedRef<T[K]> };
   
   for (const key of keys) {
     proxies[key] = useModelProxy(props, emit, key);

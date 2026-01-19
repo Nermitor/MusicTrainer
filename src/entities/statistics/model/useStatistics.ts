@@ -1,4 +1,4 @@
-import { computed } from 'vue';
+import { computed, readonly } from 'vue';
 import type { TrainingSession, NoteAttempt } from '@/shared/types';
 import { saveToStorage, loadFromStorage, STORAGE_KEYS } from '@/shared/lib';
 import type { StatisticsTypes } from '../types';
@@ -14,6 +14,10 @@ const DEFAULT_STATISTICS: StatisticsTypes.Statistics = {
   noteStats: {},
 };
 
+// Лимиты для оптимизации памяти
+const MAX_SESSIONS = 100; // Максимальное количество хранимых сессий
+const MAX_NOTE_STATS = 50; // Максимальное количество нот в статистике
+
 /**
  * Composable для работы со статистикой тренировок
  * Использует useState для SSR-совместимого глобального состояния
@@ -21,6 +25,8 @@ const DEFAULT_STATISTICS: StatisticsTypes.Statistics = {
 export const useStatistics = () => {
   // Используем useState для SSR-совместимого глобального состояния
   // useState автоматически синхронизирует состояние между сервером и клиентом
+  // Примечание: для очень больших массивов (1000+ элементов) можно рассмотреть использование shallowRef
+  // но для текущего использования (до 100 сессий) useState оптимален
   const statistics = useState<StatisticsTypes.Statistics>('statistics', () => ({ ...DEFAULT_STATISTICS }));
   
   /**
@@ -32,6 +38,12 @@ export const useStatistics = () => {
       STORAGE_KEYS.STATISTICS,
       DEFAULT_STATISTICS
     ) ?? DEFAULT_STATISTICS;
+    
+    // Оптимизация памяти: применяем лимиты при загрузке (на случай, если данные были сохранены до введения лимитов)
+    if (statistics.value.sessions.length > MAX_SESSIONS) {
+      statistics.value.sessions = statistics.value.sessions.slice(0, MAX_SESSIONS);
+    }
+    limitNoteStats();
   };
   
   /**
@@ -74,6 +86,12 @@ export const useStatistics = () => {
    */
   const addSession = (session: TrainingSession): void => {
     statistics.value.sessions.unshift(session);
+    
+    // Оптимизация памяти: ограничиваем количество хранимых сессий
+    if (statistics.value.sessions.length > MAX_SESSIONS) {
+      statistics.value.sessions = statistics.value.sessions.slice(0, MAX_SESSIONS);
+    }
+    
     statistics.value.totalSessions++;
     statistics.value.totalNotes += session.totalNotes;
     statistics.value.totalCorrect += session.correctNotes;
@@ -88,7 +106,33 @@ export const useStatistics = () => {
       updateNoteStats(attempt);
     });
     
+    // Оптимизация памяти: ограничиваем количество нот в статистике
+    limitNoteStats();
+    
     saveStatistics();
+  };
+  
+  /**
+   * Ограничить количество нот в статистике до топ N по количеству попыток
+   */
+  const limitNoteStats = (): void => {
+    const noteStats = statistics.value.noteStats;
+    const noteEntries = Object.entries(noteStats);
+    
+    if (noteEntries.length <= MAX_NOTE_STATS) {
+      return;
+    }
+    
+    // Сортируем по общему количеству попыток (correct + wrong)
+    noteEntries.sort((a, b) => {
+      const totalA = a[1].correct + a[1].wrong;
+      const totalB = b[1].correct + b[1].wrong;
+      return totalB - totalA; // По убыванию
+    });
+    
+    // Оставляем только топ N нот
+    const topNotes = noteEntries.slice(0, MAX_NOTE_STATS);
+    statistics.value.noteStats = Object.fromEntries(topNotes) as StatisticsTypes.Statistics['noteStats'];
   };
   
   /**
@@ -133,7 +177,9 @@ export const useStatistics = () => {
   const accuracy = computed(() => statistics.value.overallAccuracy);
   
   return {
-    statistics,
+    // Оптимизация: используем readonly для предотвращения случайных мутаций извне
+    // Методы addSession, clearStatistics, updateNoteStats все еще могут изменять statistics
+    statistics: readonly(statistics),
     hasSessions,
     accuracy,
     loadStatistics,

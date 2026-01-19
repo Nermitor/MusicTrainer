@@ -9,14 +9,31 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
-import { StatisticsView } from '@/widgets/statistics-view';
+import { onMounted, defineAsyncComponent } from 'vue';
 import { useStatistics } from '@/entities/statistics';
+
+// Оптимизация: используем defineAsyncComponent для тяжелых виджетов
+const StatisticsView = defineAsyncComponent(() => import('@/widgets/statistics-view/ui/StatisticsView.vue'));
+
+// Оптимизация: используем useSeoMeta для SEO мета-тегов
+useSeoMeta({
+  title: 'Музыкальный тренажёр - Статистика',
+  description: 'Просмотрите статистику ваших тренировок на музыкальном тренажере',
+  ogTitle: 'Музыкальный тренажёр - Статистика',
+  ogDescription: 'Просмотрите статистику ваших тренировок на музыкальном тренажере',
+  ogType: 'website',
+});
 
 const statisticsStore = useStatistics();
 
-onMounted(() => {
+// Оптимизация: используем useLazyAsyncData для не-критичной загрузки статистики
+// Это улучшает FCP, так как данные загружаются асинхронно после рендеринга
+const { pending } = useLazyAsyncData('statistics', () => {
   statisticsStore.loadStatistics();
+  return Promise.resolve();
+}, {
+  server: false, // Загружаем только на клиенте (localStorage недоступен на сервере)
+  lazy: true, // Ленивая загрузка - не блокирует рендеринг
 });
 
 function handleClearStatistics() {

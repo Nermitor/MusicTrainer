@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, readonly } from 'vue';
 import type { TrainingMode, NoteAttempt, TrainingSettings } from '@/shared/types';
 import type { SessionTypes } from '../types';
 
@@ -109,7 +109,9 @@ export const useSession = () => {
   const notesCompleted = computed(() => currentSession.value?.totalNotes || 0);
   
   return {
-    currentSession,
+    // Оптимизация: используем readonly для предотвращения случайных мутаций извне
+    // Методы startSession, endSession, addAttempt все еще могут изменять currentSession
+    currentSession: readonly(currentSession),
     isActive,
     currentAccuracy,
     notesCompleted,

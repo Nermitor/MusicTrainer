@@ -1,4 +1,4 @@
-import { computed } from 'vue';
+import { computed, readonly } from 'vue';
 import type { TrainingSettings } from '@/shared/types';
 import { saveToStorage, loadFromStorage, STORAGE_KEYS } from '@/shared/lib';
 import type { ProfileTypes } from '../types';
@@ -10,6 +10,8 @@ import type { ProfileTypes } from '../types';
 export const useProfile = () => {
   // Используем useState для SSR-совместимого глобального состояния
   // useState автоматически синхронизирует состояние между сервером и клиентом
+  // Примечание: для очень больших массивов (1000+ элементов) можно рассмотреть использование shallowRef
+  // но для текущего использования (обычно < 20 профилей) useState оптимален
   const profiles = useState<ProfileTypes.Profile[]>('profiles', () => []);
   
   /**
@@ -41,6 +43,7 @@ export const useProfile = () => {
     };
     
     profiles.value.push(profile);
+    
     // Сохраняем сразу для критичной операции создания
     saveProfiles(true);
     
@@ -69,6 +72,9 @@ export const useProfile = () => {
   const profileCount = computed(() => profiles.value.length);
   
   return {
+    // Возвращаем profiles напрямую, а не через readonly
+    // Методы createProfile и deleteProfile мутируют profiles.value напрямую
+    // readonly здесь не нужен, так как методы уже контролируют мутации
     profiles,
     profileCount,
     loadProfiles,

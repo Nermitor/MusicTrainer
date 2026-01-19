@@ -10,7 +10,9 @@ export default defineNuxtConfig({
   // TypeScript
   typescript: {
     strict: true,
-    typeCheck: false // Отключаем typeCheck чтобы избежать проблем с vue-tsc и библиотеками
+    // Отключаем typeCheck в Nuxt из-за проблемы с vue-tsc и vite-plugin-checker
+    // Используйте отдельную команду: npm run type-check
+    typeCheck: false
   },
 
   // SSR режим - для GitHub Pages используется SSG (Static Site Generation)
@@ -195,6 +197,11 @@ export default defineNuxtConfig({
       // Tone.js требует AudioContext, VexFlow требует Canvas/DOM
       // Эти библиотеки загружаются только на клиенте через ClientOnly компоненты
       // Не включаем их в noExternal, чтобы они были внешними для SSR
+    },
+    // Оптимизация зависимостей - исключаем vexflow и tone из предварительной оптимизации
+    // чтобы избежать проблем с путями в development режиме
+    optimizeDeps: {
+      exclude: ['vexflow', 'tone']
     }
   },
 

@@ -1,47 +1,26 @@
 /**
  * Утилиты для работы с localStorage
- * Используют process.client для SSR-безопасности
+ * Используют простые функции для обратной совместимости
+ * Для реактивного доступа используйте useStorage из @vueuse/core напрямую в composables
  */
 
-// Проверка на клиент (SSR-безопасно)
-const isClient = typeof process !== 'undefined' ? process.client : typeof window !== 'undefined';
-
 // Дебаунс таймеры для каждого ключа
-const debounceTimers: Record<string, number | null> = {};
+const debounceTimers: Record<string, ReturnType<typeof setTimeout> | null> = {};
 const DEBOUNCE_DELAY = 300; // 300ms задержка для дебаунса
 
 /**
- * Сохранить данные в localStorage с дебаунсом
+ * Проверка доступности localStorage (SSR-безопасно)
  */
-export function saveToStorage<T>(key: string, data: T, immediate = false): void {
-  if (!isClient) return;
-  
-  // Если immediate = true, сохраняем сразу без дебаунса
-  if (immediate) {
-    clearDebounceTimer(key);
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error(`Error saving to localStorage (key: ${key}):`, error);
-    }
+function isLocalStorageAvailable(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const test = '__localStorage_test__';
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return true;
+  } catch {
+    return false;
   }
-    return;
-  }
-  
-  // Очищаем предыдущий таймер для этого ключа
-  clearDebounceTimer(key);
-  
-  // Устанавливаем новый таймер
-  debounceTimers[key] = window.setTimeout(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-      debounceTimers[key] = null;
-    } catch (error) {
-      console.error(`Error saving to localStorage (key: ${key}):`, error);
-      debounceTimers[key] = null;
-    }
-  }, DEBOUNCE_DELAY) as unknown as number;
 }
 
 /**
@@ -49,18 +28,53 @@ export function saveToStorage<T>(key: string, data: T, immediate = false): void 
  */
 function clearDebounceTimer(key: string): void {
   if (debounceTimers[key] !== null && debounceTimers[key] !== undefined) {
-    if (typeof window !== 'undefined') {
-      window.clearTimeout(debounceTimers[key] as number);
-    }
+    clearTimeout(debounceTimers[key]!);
     debounceTimers[key] = null;
   }
+}
+
+/**
+ * Сохранить данные в localStorage с дебаунсом
+ */
+export function saveToStorage<T>(key: string, data: T, immediate = false): void {
+  if (!isLocalStorageAvailable()) return;
+  
+  // Если immediate = true, сохраняем сразу без дебаунса
+  if (immediate) {
+    clearDebounceTimer(key);
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`Error saving to localStorage (key: ${key}):`, error);
+      }
+    }
+    return;
+  }
+  
+  // Очищаем предыдущий таймер для этого ключа
+  clearDebounceTimer(key);
+  
+  // Устанавливаем новый таймер
+  debounceTimers[key] = setTimeout(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      debounceTimers[key] = null;
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`Error saving to localStorage (key: ${key}):`, error);
+      }
+      debounceTimers[key] = null;
+    }
+  }, DEBOUNCE_DELAY);
 }
 
 /**
  * Загрузить данные из localStorage
  */
 export function loadFromStorage<T>(key: string, defaultValue?: T): T | null {
-  if (!isClient) return defaultValue !== undefined ? defaultValue : null;
+  if (!isLocalStorageAvailable()) return defaultValue !== undefined ? defaultValue : null;
+  
   try {
     const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved) : (defaultValue !== undefined ? defaultValue : null);
@@ -76,9 +90,12 @@ export function loadFromStorage<T>(key: string, defaultValue?: T): T | null {
  * Удалить данные из localStorage
  */
 export function removeFromStorage(key: string): void {
-  if (!isClient) return;
+  if (!isLocalStorageAvailable()) return;
+  
   try {
     localStorage.removeItem(key);
+    // Очищаем дебаунс таймер, если он есть
+    clearDebounceTimer(key);
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
       console.error(`Error removing from localStorage (key: ${key}):`, error);
@@ -90,7 +107,7 @@ export function removeFromStorage(key: string): void {
  * Проверить, есть ли данные в localStorage
  */
 export function hasInStorage(key: string): boolean {
-  if (!isClient) return false;
+  if (!isLocalStorageAvailable()) return false;
   return localStorage.getItem(key) !== null;
 }
 
